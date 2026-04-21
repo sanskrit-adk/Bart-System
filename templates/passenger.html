@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — BART{% endblock %}
+{% block content %}
+
+{% if not service_active %}
+<div class="alert alert-service-off mb-4">
+  <i class="bi bi-exclamation-triangle-fill me-2"></i>
+  <strong>Service Suspended</strong> — BART is not operating outside 5:00 AM – 12:30 AM
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="fw-bold mb-1">Welcome back, {{ user.name }}</h4>
+    <p class="text-muted small mb-0">
+      <span class="badge" style="background:var(--surface);color:var(--muted);border:1px solid var(--border)">
+        {{ user.passenger_type.value.title() }}
+      </span>
+      {% if user.get_discount_rate() > 0 %}
+      <span class="ms-1" style="color:var(--green);font-size:.8rem">
+        <i class="bi bi-tag-fill"></i> {{ (user.get_discount_rate()*100)|int }}% discount
+      </span>
+      {% endif %}
+    </p>
+  </div>
+  {% if card %}
+  <div class="text-end">
+    <div class="balance-display" id="balanceDisplay">${{ "%.2f"|format(card.balance) }}</div>
+    <p class="text-muted small mb-0">Clipper · {{ card.card_id[:12] }}…</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if not card %}
+<div class="card p-5 text-center">
+  <i class="bi bi-credit-card" style="font-size:3.5rem;color:var(--muted)"></i>
+  <h5 class="mt-3 fw-bold">No Clipper Card</h5>
+  <p class="text-muted">Create a Clipper card to start riding BART.</p>
+  <button class="btn btn-primary-bart mx-auto px-4" style="width:fit-content" onclick="createCard()">
+    <i class="bi bi-plus-circle me-1"></i> Create Clipper Card
+  </button>
+</div>
+
+{% else %}
+
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#overview">Overview</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tapin">Tap In / Out</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#transactions">Transactions</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#triphistory">Trip History</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planner">Trip Planner</button></li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- OVERVIEW -->
+  <div class="tab-pane fade show active" id="overview">
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="ovBalance">${{ "%.2f"|format(card.balance) }}</div>
+          <div class="stat-label">Card Balance</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-value">{{ trips|length }}</div>
+          <div class="stat-label">Total Trips</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" style="color:{{ 'var(--yellow)' if active_trip else 'var(--muted)' }}; font-size:1.4rem">
+            {% if active_trip %}In Progress{% else %}No Trip{% endif %}
+          </div>
+          <div class="stat-label">Current Trip</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--green)">{{ (user.get_discount_rate()*100)|int }}%</div>
+          <div class="stat-label">Your Discount</div>
+        </div>
+      </div>
+    </div>
+
+    {% if active_trip %}
+    <div class="card mb-4 p-3" style="border-color:var(--yellow)">
+      <div class="d-flex align-items-center gap-3">
+        <i class="bi bi-train-front-fill" style="font-size:2rem;color:var(--yellow)"></i>
+        <div>
+          <p class="mb-0 fw-semibold">Active Trip</p>
+          <p class="mb-0 text-muted small">Entered at <strong style="color:var(--text)">{{ active_trip.entry_station.name }}</strong> — tap out at your destination</p>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">Top Up Card</div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          {% for amt in [10, 20, 50, 100] %}
+          <button class="btn btn-outline-secondary px-3" onclick="topUp({{ amt }})">+${{ amt }}</button>
+          {% endfor %}
+          <div class="input-group" style="width:220px">
+            <span class="input-group-text">$</span>
+            <input type="number" id="customAmount" class="form-control" placeholder="Other amount" min="1" step="0.01">
+            <button class="btn btn-primary-bart" onclick="topUpCustom()">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAP IN / OUT -->
+  <div class="tab-pane fade" id="tapin">
+    <div class="row g-4">
+
+      <div class="col-md-6">
+        {% if not active_trip %}
+        <div class="card p-4">
+          <h5 class="fw-semibold mb-1"><i class="bi bi-box-arrow-in-right me-2" style="color:var(--green)"></i>Tap In</h5>
+          <p class="text-muted small mb-3">Select your entry station to start your trip</p>
+          <label class="form-label small fw-semibold" style="color:var(--muted)">ENTRY STATION</label>
+          <select id="entryStation" class="form-select mb-3">
+            <option value="">Select station…</option>
+            {% for s in stations %}
+            {% if s.status.value == 'open' %}
+            <option value="{{ s.station_id }}">{{ s.name }} — Zone {{ s.zone }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <button class="btn btn-primary-bart w-100 py-2" onclick="tapIn()" {% if not service_active %}disabled title="Service suspended"{% endif %}>
+            <i class="bi bi-qr-code-scan me-1"></i> Tap In
+          </button>
+          {% if not service_active %}
+          <p class="text-muted small text-center mt-2 mb-0">Service unavailable outside 5:00 AM – 12:30 AM</p>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="card p-4" style="border-color:var(--green)">
+          <h5 class="fw-semibold mb-1"><i class="bi bi-box-arrow-right me-2" style="color:var(--red)"></i>Tap Out</h5>
+          <p class="text-muted small mb-3">Trip in progress — entered at <strong style="color:var(--text)">{{ active_trip.entry_station.name }}</strong></p>
+          <label class="form-label small fw-semibold" style="color:var(--muted)">EXIT STATION</label>
+          <select id="exitStation" class="form-select mb-3">
+            <option value="">Select exit station…</option>
+            {% for s in stations %}
+            {% if s.station_id != active_trip.entry_station.station_id and s.status.value == 'open' %}
+            <option value="{{ s.station_id }}">{{ s.name }} — Zone {{ s.zone }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <button class="btn btn-danger-bart w-100 py-2" onclick="tapOut()">
+            <i class="bi bi-qr-code-scan me-1"></i> Tap Out &amp; Pay Fare
+          </button>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="col-md-6">
+        <div class="card p-4">
+          <h5 class="fw-semibold mb-1"><i class="bi bi-train-front me-2" style="color:var(--blue)"></i>Next Trains</h5>
+          <p class="text-muted small mb-3">Real-time train availability at a station</p>
+          <label class="form-label small fw-semibold" style="color:var(--muted)">STATION</label>
+          <select id="trainStation" class="form-select mb-3" onchange="getNextTrains()">
+            <option value="">Select station…</option>
+            {% for s in stations %}
+            <option value="{{ s.station_id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <div id="trainsList" class="text-muted small">Select a station above</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS -->
+  <div class="tab-pane fade" id="transactions">
+    <div class="card">
+      <div class="card-header">Transaction History <span class="text-muted fw-normal small">(last 15)</span></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>Date / Time</th>
+                <th>Type</th>
+                <th class="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in transactions %}
+              <tr>
+                <td class="text-muted small">{{ tx.time.strftime('%b %d, %Y  %H:%M') }}</td>
+                <td>
+                  <span class="badge" style="background:{{ 'rgba(48,209,88,.2)' if tx.type.value == 'topup' else 'rgba(255,59,48,.2)' if tx.type.value == 'fare' else 'rgba(10,132,255,.2)' }};color:{{ 'var(--green)' if tx.type.value == 'topup' else 'var(--red)' if tx.type.value == 'fare' else 'var(--blue)' }}">
+                    {{ tx.type.value.title() }}
+                  </span>
+                </td>
+                <td class="text-end fw-semibold {{ 'text-success' if tx.type.value == 'topup' else 'text-danger' if tx.type.value == 'fare' else '' }}">
+                  {{ '+' if tx.type.value == 'topup' else '-' }}${{ "%.2f"|format(tx.amount) }}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="3" class="text-center text-muted py-5">No transactions yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRIP HISTORY -->
+  <div class="tab-pane fade" id="triphistory">
+    <div class="card">
+      <div class="card-header">Trip History <span class="text-muted fw-normal small">(last 15)</span></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>Date</th><th>From</th><th>To</th><th class="text-end">Fare</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for trip in trips %}
+              <tr>
+                <td class="text-muted small">{{ trip.start_time.strftime('%b %d, %H:%M') }}</td>
+                <td>{{ trip.entry_station.name }}</td>
+                <td>{{ trip.exit_station.name if trip.exit_station else '—' }}</td>
+                <td class="text-end">{{ '$' + '%.2f'|format(trip.fare) if trip.fare else '—' }}</td>
+                <td>
+                  <span class="badge" style="background:{{ 'rgba(255,214,10,.2)' if trip.status.value == 'active' else 'rgba(48,209,88,.2)' }};color:{{ 'var(--yellow)' if trip.status.value == 'active' else 'var(--green)' }}">
+                    {{ trip.status.value.title() }}
+                  </span>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-center text-muted py-5">No trips yet</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRIP PLANNER -->
+  <div class="tab-pane fade" id="planner">
+    <div class="row g-4">
+      <div class="col-md-5">
+        <div class="card p-4">
+          <h5 class="fw-semibold mb-3"><i class="bi bi-map me-2" style="color:var(--blue)"></i>Plan Your Trip</h5>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" style="color:var(--muted)">FROM</label>
+            <select id="planFrom" class="form-select">
+              <option value="">Select start station…</option>
+              {% for s in stations %}
+              <option value="{{ s.station_id }}">{{ s.name }} (Zone {{ s.zone }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="form-label small fw-semibold" style="color:var(--muted)">TO</label>
+            <select id="planTo" class="form-select">
+              <option value="">Select end station…</option>
+              {% for s in stations %}
+              <option value="{{ s.station_id }}">{{ s.name }} (Zone {{ s.zone }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-primary-bart w-100 py-2" onclick="planTrip()">
+            <i class="bi bi-search me-1"></i> Calculate Fare
+          </button>
+        </div>
+      </div>
+      <div class="col-md-7">
+        <div class="card p-4 h-100" id="planResult" style="display:none">
+          <h5 class="fw-semibold mb-3">Trip Details</h5>
+          <div id="planDetails"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function createCard() {
+  const r = await apiPost('/api/card/create', {});
+  if (r.success) { showToast('Clipper card created!'); setTimeout(() => location.reload(), 1200); }
+  else showToast(r.error, 'danger');
+}
+
+async function topUp(amount) {
+  const r = await apiPost('/api/card/topup', {amount});
+  if (r.success) {
+    showToast(`+$${amount.toFixed(2)} added to card`);
+    const bal = '$' + r.balance.toFixed(2);
+    ['balanceDisplay', 'ovBalance'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = bal; });
+  } else showToast(r.error, 'danger');
+}
+
+async function topUpCustom() {
+  const amt = parseFloat(document.getElementById('customAmount').value);
+  if (!amt || amt <= 0) { showToast('Enter a valid amount', 'warning'); return; }
+  await topUp(amt);
+}
+
+async function tapIn() {
+  const sid = document.getElementById('entryStation').value;
+  if (!sid) { showToast('Select a station first', 'warning'); return; }
+  const r = await apiPost('/api/trip/entry', {station_id: sid});
+  if (r.success) { showToast(`Tapped in at ${r.station}`); setTimeout(() => location.reload(), 1500); }
+  else showToast(r.error, 'danger');
+}
+
+async function tapOut() {
+  const sid = document.getElementById('exitStation').value;
+  if (!sid) { showToast('Select exit station first', 'warning'); return; }
+  const r = await apiPost('/api/trip/exit', {station_id: sid});
+  if (r.success) {
+    showToast(`Fare: $${r.fare.toFixed(2)} · Balance: $${r.balance.toFixed(2)}`);
+    setTimeout(() => location.reload(), 2000);
+  } else showToast(r.error, 'danger');
+}
+
+async function getNextTrains() {
+  const sid = document.getElementById('trainStation').value;
+  const el = document.getElementById('trainsList');
+  if (!sid) { el.textContent = 'Select a station above'; return; }
+  const r = await fetch(`/api/trains/next?station_id=${sid}`);
+  const trains = await r.json();
+  if (!Array.isArray(trains) || !trains.length) { el.innerHTML = '<span class="text-muted">No trains available</span>'; return; }
+  el.innerHTML = trains.map(t => `
+    <div class="d-flex justify-content-between align-items-center p-2 mb-2 rounded" style="background:var(--surface)">
+      <div>
+        <i class="bi bi-train-front me-1" style="color:var(--blue)"></i>
+        <strong>${t.line}</strong>
+        <span class="text-muted ms-1 small">${t.train_id}</span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        ${t.eta_minutes ? `<span class="text-muted small">${t.eta_minutes} min</span>` : ''}
+        <span class="badge" style="background:${t.status==='running'?'rgba(48,209,88,.2)':t.status==='delayed'?'rgba(255,214,10,.2)':'rgba(255,59,48,.2)'};color:${t.status==='running'?'var(--green)':t.status==='delayed'?'var(--yellow)':'var(--red)'}">
+          ${t.status.replace('_',' ')}
+        </span>
+      </div>
+    </div>`).join('');
+}
+
+async function planTrip() {
+  const start = document.getElementById('planFrom').value;
+  const end = document.getElementById('planTo').value;
+  if (!start || !end) { showToast('Select both stations', 'warning'); return; }
+  const r = await apiPost('/api/trip/plan', {start_station_id: start, end_station_id: end});
+  const box = document.getElementById('planResult');
+  if (r.success) {
+    const d = r.result;
+    document.getElementById('planDetails').innerHTML = `
+      <div class="mb-3 p-3 rounded" style="background:var(--surface)">
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">FROM</span><span class="fw-semibold">${d.start}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">TO</span><span class="fw-semibold">${d.end}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">ZONES</span><span>${d.zones}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">EST. TIME</span><span>${d.estimated_time} min</span>
+        </div>
+        <hr style="border-color:var(--border)">
+        <div class="d-flex justify-content-between align-items-center">
+          <span class="fw-semibold">FARE</span>
+          <span style="font-size:2rem;font-weight:700;color:var(--green)">$${d.fare.toFixed(2)}</span>
+        </div>
+        ${d.discount_applied ? '<p class="text-success small mb-0 mt-1"><i class="bi bi-tag-fill me-1"></i>Passenger discount applied</p>' : ''}
+      </div>`;
+    box.style.display = '';
+  } else {
+    showToast(r.error, 'danger');
+    box.style.display = 'none';
+  }
+}
+</script>
+{% endblock %}

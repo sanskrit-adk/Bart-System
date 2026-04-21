@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — BART{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="fw-bold mb-1">Admin Dashboard</h4>
+    <p class="text-muted small mb-0">{{ user.name }} · {{ user.role.value.replace('_',' ').title() }}</p>
+  </div>
+  {% if user.role.value == 'super_admin' %}
+  <a href="/superadmin" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-shield-fill me-1"></i> Super Admin
+  </a>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value">{{ stats.total_trips }}</div>
+      <div class="stat-label">Total Trips</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--yellow)">{{ stats.active_trips }}</div>
+      <div class="stat-label">Active Trips</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--green)">${{ "%.2f"|format(stats.total_revenue) }}</div>
+      <div class="stat-label">Total Revenue</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-value">${{ "%.2f"|format(stats.average_fare) }}</div>
+      <div class="stat-label">Avg Fare</div>
+    </div>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#stations">Stations</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#trains">Trains</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#alerts">Alerts</button></li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- STATIONS -->
+  <div class="tab-pane fade show active" id="stations">
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead><tr><th>Station</th><th>Zone</th><th>Status</th><th>Change Status</th></tr></thead>
+            <tbody>
+              {% for s in stations %}
+              <tr>
+                <td><strong>{{ s.name }}</strong></td>
+                <td><span class="badge bg-secondary">Zone {{ s.zone }}</span></td>
+                <td>
+                  <span class="badge" style="background:{{ 'rgba(48,209,88,.2)' if s.status.value == 'open' else 'rgba(255,59,48,.2)' if s.status.value == 'closed' else 'rgba(255,214,10,.2)' }};color:{{ 'var(--green)' if s.status.value == 'open' else 'var(--red)' if s.status.value == 'closed' else 'var(--yellow)' }}">
+                    {{ s.status.value.title() }}
+                  </span>
+                </td>
+                <td>
+                  <div class="d-flex gap-1 align-items-center">
+                    <select class="form-select form-select-sm" style="width:145px" id="sStat_{{ s.station_id }}">
+                      <option value="open" {{ 'selected' if s.status.value == 'open' }}>Open</option>
+                      <option value="closed" {{ 'selected' if s.status.value == 'closed' }}>Closed</option>
+                      <option value="maintenance" {{ 'selected' if s.status.value == 'maintenance' }}>Maintenance</option>
+                    </select>
+                    <button class="btn btn-sm btn-primary-bart" onclick="updateStation('{{ s.station_id }}')">Apply</button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRAINS -->
+  <div class="tab-pane fade" id="trains">
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead><tr><th>Train</th><th>Line</th><th>Status</th><th>Current Location</th><th>Change Status</th></tr></thead>
+            <tbody>
+              {% for t in trains %}
+              <tr>
+                <td><code>{{ t.train_id }}</code></td>
+                <td><strong>{{ t.line }}</strong></td>
+                <td>
+                  <span class="badge" style="background:{{ 'rgba(48,209,88,.2)' if t.status.value == 'running' else 'rgba(255,214,10,.2)' if t.status.value == 'delayed' else 'rgba(255,59,48,.2)' }};color:{{ 'var(--green)' if t.status.value == 'running' else 'var(--yellow)' if t.status.value == 'delayed' else 'var(--red)' }}">
+                    {{ t.status.value.replace('_',' ').title() }}
+                  </span>
+                </td>
+                <td class="text-muted small">{{ t.current_station.name if t.current_station else '—' }}</td>
+                <td>
+                  <div class="d-flex gap-1 align-items-center">
+                    <select class="form-select form-select-sm" style="width:165px" id="tStat_{{ t.train_id }}">
+                      <option value="running" {{ 'selected' if t.status.value == 'running' }}>Running</option>
+                      <option value="delayed" {{ 'selected' if t.status.value == 'delayed' }}>Delayed</option>
+                      <option value="out_of_service" {{ 'selected' if t.status.value == 'out_of_service' }}>Out of Service</option>
+                    </select>
+                    <button class="btn btn-sm btn-primary-bart" onclick="updateTrain('{{ t.train_id }}')">Apply</button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERTS -->
+  <div class="tab-pane fade" id="alerts">
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-megaphone me-1"></i> Create Alert</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label small fw-semibold" style="color:var(--muted)">TYPE</label>
+              <select id="alertType" class="form-select">
+                <option value="delay">Delay</option>
+                <option value="closure">Closure</option>
+                <option value="route_change">Route Change</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold" style="color:var(--muted)">TITLE</label>
+              <input type="text" id="alertTitle" class="form-control" placeholder="Brief alert title">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold" style="color:var(--muted)">MESSAGE</label>
+              <textarea id="alertMsg" class="form-control" rows="3" placeholder="Detailed alert message"></textarea>
+            </div>
+            <div class="mb-4">
+              <label class="form-label small fw-semibold" style="color:var(--muted)">AFFECTED STATIONS <span class="fw-normal">(Ctrl+click to multi-select)</span></label>
+              <select id="alertStations" class="form-select" multiple style="height:110px">
+                {% for s in stations %}
+                <option value="{{ s.station_id }}">{{ s.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-primary-bart w-100" onclick="createAlert()">
+              <i class="bi bi-megaphone me-1"></i> Post Alert
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">Active Alerts</div>
+          <div class="card-body p-0" style="max-height:520px;overflow-y:auto">
+            {% set active_alerts = alerts|selectattr('is_active')|list %}
+            {% if not active_alerts %}
+            <p class="text-center text-muted py-5">No active alerts</p>
+            {% else %}
+            {% for a in active_alerts %}
+            <div class="p-3 border-bottom-subtle">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <span class="badge mb-1" style="background:{{ 'rgba(255,214,10,.2)' if a.alert_type.value == 'delay' else 'rgba(255,59,48,.2)' if a.alert_type.value == 'closure' else 'rgba(10,132,255,.2)' }};color:{{ 'var(--yellow)' if a.alert_type.value == 'delay' else 'var(--red)' if a.alert_type.value == 'closure' else 'var(--blue)' }}">
+                    {{ a.alert_type.value.replace('_',' ').title() }}
+                  </span>
+                  <p class="mb-1 fw-semibold">{{ a.title }}</p>
+                  <p class="text-muted small mb-0">{{ a.message }}</p>
+                </div>
+                <button class="btn btn-sm btn-outline-danger flex-shrink-0" onclick="closeAlert('{{ a.alert_id }}')">Dismiss</button>
+              </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function updateStation(sid) {
+  const status = document.getElementById('sStat_' + sid).value;
+  const r = await apiPost('/api/admin/station/status', {station_id: sid, status});
+  if (r.success) { showToast('Station updated to ' + r.status); setTimeout(() => location.reload(), 1300); }
+  else showToast(r.error, 'danger');
+}
+
+async function updateTrain(tid) {
+  const status = document.getElementById('tStat_' + tid).value;
+  const r = await apiPost('/api/admin/train/status', {train_id: tid, status});
+  if (r.success) { showToast('Train updated to ' + r.status); setTimeout(() => location.reload(), 1300); }
+  else showToast(r.error, 'danger');
+}
+
+async function createAlert() {
+  const sids = Array.from(document.getElementById('alertStations').selectedOptions).map(o => o.value);
+  const r = await apiPost('/api/admin/alert/create', {
+    alert_type: document.getElementById('alertType').value,
+    title: document.getElementById('alertTitle').value,
+    message: document.getElementById('alertMsg').value,
+    station_ids: sids,
+  });
+  if (r.success) { showToast('Alert posted'); setTimeout(() => location.reload(), 1300); }
+  else showToast(r.error, 'danger');
+}
+
+async function closeAlert(aid) {
+  const r = await apiPost('/api/admin/alert/close', {alert_id: aid});
+  if (r.success) { showToast('Alert dismissed'); setTimeout(() => location.reload(), 1000); }
+  else showToast(r.error, 'danger');
+}
+</script>
+{% endblock %}

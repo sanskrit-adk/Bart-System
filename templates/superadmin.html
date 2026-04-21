@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Super Admin — BART{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="fw-bold mb-1">Super Admin</h4>
+    <p class="text-muted small mb-0">{{ user.name }} · Full System Access</p>
+  </div>
+  <a href="/admin" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-speedometer2 me-1"></i> Admin View
+  </a>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for val, label, color in [
+    (stats.total_users, 'Users', 'var(--blue)'),
+    (stats.total_stations, 'Stations', 'var(--text)'),
+    (stats.total_trains, 'Trains', 'var(--text)'),
+    (stats.total_trips, 'Total Trips', 'var(--text)'),
+    (stats.active_trips, 'Active Trips', 'var(--yellow)'),
+    ('$' + '%.0f'|format(stats.total_revenue), 'Revenue', 'var(--green)'),
+  ] %}
+  <div class="col-6 col-md-2">
+    <div class="stat-card">
+      <div class="stat-value" style="color:{{ color }};font-size:1.6rem">{{ val }}</div>
+      <div class="stat-label">{{ label }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#fareConfig">Fare Config</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#saStations">Stations</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#saTrains">Trains</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#saAlerts">Alerts</button></li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- FARE CONFIG -->
+  <div class="tab-pane fade show active" id="fareConfig">
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="card p-4">
+          <h5 class="fw-semibold mb-3"><i class="bi bi-currency-dollar me-1" style="color:var(--green)"></i>Fare Configuration</h5>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" style="color:var(--muted)">BASE FARE</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" id="baseFare" class="form-control" value="{{ fare_calculator.BASE_FARE }}" step="0.25" min="0">
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="form-label small fw-semibold" style="color:var(--muted)">ZONE RATE (per zone)</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" id="zoneRate" class="form-control" value="{{ fare_calculator.ZONE_RATE }}" step="0.25" min="0">
+            </div>
+          </div>
+          <button class="btn btn-primary-bart w-100" onclick="updateFares()">
+            <i class="bi bi-check-circle me-1"></i> Update Fares
+          </button>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card p-4">
+          <h5 class="fw-semibold mb-3">Current Structure</h5>
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <td class="text-muted">Base Fare</td>
+                <td class="fw-semibold" id="displayBase">${{ "%.2f"|format(fare_calculator.BASE_FARE) }}</td>
+              </tr>
+              <tr>
+                <td class="text-muted">Zone Rate</td>
+                <td class="fw-semibold" id="displayZone">${{ "%.2f"|format(fare_calculator.ZONE_RATE) }}/zone</td>
+              </tr>
+              <tr>
+                <td class="text-muted">Student Discount</td>
+                <td style="color:var(--green)">25%</td>
+              </tr>
+              <tr>
+                <td class="text-muted">Senior Discount</td>
+                <td style="color:var(--green)">37.5%</td>
+              </tr>
+              <tr>
+                <td class="text-muted">Total Revenue</td>
+                <td style="color:var(--green)">${{ "%.2f"|format(ridership.total_revenue) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATIONS -->
+  <div class="tab-pane fade" id="saStations">
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead><tr><th>Station</th><th>Zone</th><th>Status</th><th>Change Status</th></tr></thead>
+            <tbody>
+              {% for s in stations %}
+              <tr>
+                <td><strong>{{ s.name }}</strong></td>
+                <td><span class="badge bg-secondary">Zone {{ s.zone }}</span></td>
+                <td>
+                  <span class="badge" style="background:{{ 'rgba(48,209,88,.2)' if s.status.value == 'open' else 'rgba(255,59,48,.2)' if s.status.value == 'closed' else 'rgba(255,214,10,.2)' }};color:{{ 'var(--green)' if s.status.value == 'open' else 'var(--red)' if s.status.value == 'closed' else 'var(--yellow)' }}">
+                    {{ s.status.value.title() }}
+                  </span>
+                </td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <select class="form-select form-select-sm" style="width:145px" id="sStat_{{ s.station_id }}">
+                      <option value="open" {{ 'selected' if s.status.value == 'open' }}>Open</option>
+                      <option value="closed" {{ 'selected' if s.status.value == 'closed' }}>Closed</option>
+                      <option value="maintenance" {{ 'selected' if s.status.value == 'maintenance' }}>Maintenance</option>
+                    </select>
+                    <button class="btn btn-sm btn-primary-bart" onclick="updateStation('{{ s.station_id }}')">Apply</button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRAINS -->
+  <div class="tab-pane fade" id="saTrains">
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead><tr><th>Train</th><th>Line</th><th>Status</th><th>Location</th><th>Change Status</th></tr></thead>
+            <tbody>
+              {% for t in trains %}
+              <tr>
+                <td><code>{{ t.train_id }}</code></td>
+                <td><strong>{{ t.line }}</strong></td>
+                <td>
+                  <span class="badge" style="background:{{ 'rgba(48,209,88,.2)' if t.status.value == 'running' else 'rgba(255,214,10,.2)' if t.status.value == 'delayed' else 'rgba(255,59,48,.2)' }};color:{{ 'var(--green)' if t.status.value == 'running' else 'var(--yellow)' if t.status.value == 'delayed' else 'var(--red)' }}">
+                    {{ t.status.value.replace('_',' ').title() }}
+                  </span>
+                </td>
+                <td class="text-muted small">{{ t.current_station.name if t.current_station else '—' }}</td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <select class="form-select form-select-sm" style="width:165px" id="tStat_{{ t.train_id }}">
+                      <option value="running" {{ 'selected' if t.status.value == 'running' }}>Running</option>
+                      <option value="delayed" {{ 'selected' if t.status.value == 'delayed' }}>Delayed</option>
+                      <option value="out_of_service" {{ 'selected' if t.status.value == 'out_of_service' }}>Out of Service</option>
+                    </select>
+                    <button class="btn btn-sm btn-primary-bart" onclick="updateTrain('{{ t.train_id }}')">Apply</button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERTS -->
+  <div class="tab-pane fade" id="saAlerts">
+    <div class="card">
+      <div class="card-header">All System Alerts</div>
+      <div class="card-body p-0" style="max-height:600px;overflow-y:auto">
+        {% if not alerts %}
+        <p class="text-center text-muted py-5">No alerts on record</p>
+        {% else %}
+        {% for a in alerts %}
+        <div class="p-3 border-bottom-subtle {{ 'opacity-50' if not a.is_active }}">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="mb-1">
+                <span class="badge" style="background:{{ 'rgba(255,214,10,.2)' if a.alert_type.value == 'delay' else 'rgba(255,59,48,.2)' if a.alert_type.value == 'closure' else 'rgba(10,132,255,.2)' }};color:{{ 'var(--yellow)' if a.alert_type.value == 'delay' else 'var(--red)' if a.alert_type.value == 'closure' else 'var(--blue)' }}">
+                  {{ a.alert_type.value.replace('_',' ').title() }}
+                </span>
+                {% if not a.is_active %}
+                <span class="badge bg-secondary ms-1">Closed</span>
+                {% endif %}
+              </div>
+              <p class="mb-1 fw-semibold">{{ a.title }}</p>
+              <p class="text-muted small mb-0">{{ a.message }}</p>
+            </div>
+            {% if a.is_active %}
+            <button class="btn btn-sm btn-outline-danger flex-shrink-0" onclick="closeAlert('{{ a.alert_id }}')">Dismiss</button>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function updateFares() {
+  const base = parseFloat(document.getElementById('baseFare').value);
+  const zone = parseFloat(document.getElementById('zoneRate').value);
+  if (isNaN(base) || isNaN(zone) || base < 0 || zone < 0) { showToast('Enter valid fare values', 'warning'); return; }
+  const [r1, r2] = await Promise.all([
+    apiPost('/api/superadmin/fare/base', {base_fare: base}),
+    apiPost('/api/superadmin/fare/zone', {zone_rate: zone}),
+  ]);
+  if (r1.success && r2.success) {
+    showToast('Fare structure updated');
+    document.getElementById('displayBase').textContent = '$' + r1.base_fare.toFixed(2);
+    document.getElementById('displayZone').textContent = '$' + r2.zone_rate.toFixed(2) + '/zone';
+  } else showToast(r1.error || r2.error, 'danger');
+}
+
+async function updateStation(sid) {
+  const status = document.getElementById('sStat_' + sid).value;
+  const r = await apiPost('/api/admin/station/status', {station_id: sid, status});
+  if (r.success) { showToast('Station updated'); setTimeout(() => location.reload(), 1300); }
+  else showToast(r.error, 'danger');
+}
+
+async function updateTrain(tid) {
+  const status = document.getElementById('tStat_' + tid).value;
+  const r = await apiPost('/api/admin/train/status', {train_id: tid, status});
+  if (r.success) { showToast('Train updated'); setTimeout(() => location.reload(), 1300); }
+  else showToast(r.error, 'danger');
+}
+
+async function closeAlert(aid) {
+  const r = await apiPost('/api/admin/alert/close', {alert_id: aid});
+  if (r.success) { showToast('Alert dismissed'); setTimeout(() => location.reload(), 1000); }
+  else showToast(r.error, 'danger');
+}
+</script>
+{% endblock %}
