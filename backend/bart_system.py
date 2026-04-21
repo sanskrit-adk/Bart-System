@@ -5,13 +5,14 @@ Step 2: Authentication, Admin Management, and Business Logic
 
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union, cast
-from models import (
+from .models import (
     User, Passenger, Admin, SuperAdmin,
     Station, Train, Card, Trip, Gate, ServiceAlert,
-    FareCalculator, TapEvent,
-    UserRole, PassengerType, StationStatus, TrainStatus, 
-    TapType, TripStatus, AlertType
+    FareCalculator, TapEvent, InputValidator,
+    UserRole, PassengerType, StationStatus, TrainStatus,
+    CardStatus, TapType, TripStatus, AlertType
 )
+from .database import Database
 
 # Type alias for admin users
 AdminUser = Union[Admin, SuperAdmin]
@@ -45,9 +46,16 @@ class AuthenticationService:
         Raises:
             ValueError: If username already exists
         """
+        username = username.strip().lower()
+        InputValidator.validate_username(username)
+        InputValidator.validate_password(password)
+        InputValidator.validate_email(email)
+        if 'name' in kwargs and kwargs['name']:
+            kwargs['name'] = InputValidator.validate_name(kwargs['name'])
+
         if username in self.username_index:
-            raise ValueError(f"Username '{username}' already exists")
-        
+            raise ValueError(f"Username '{username}' is already taken.")
+
         user_id = f"U{len(self.users)+1:04d}"
         
         if user_type == "passenger":
@@ -79,8 +87,8 @@ class AuthenticationService:
         Returns:
             Tuple of (success, user, message)
         """
-        user = self.username_index.get(username)
-        
+        user = self.username_index.get(username.strip().lower())
+
         if not user:
             return False, None, "Username not found"
         
@@ -120,8 +128,9 @@ class BARTSystem:
     - Admin operations
     """
     
-    def __init__(self):
+    def __init__(self, _test_mode: bool = False):
         # Core collections
+        self.db = Database(in_memory=_test_mode)
         self.auth_service = AuthenticationService()
         self.stations: Dict[str, Station] = {}
         self.trains: Dict[str, Train] = {}
@@ -130,11 +139,12 @@ class BARTSystem:
         self.gates: Dict[str, Gate] = {}
         self.alerts: Dict[str, ServiceAlert] = {}
         self.active_trips: Dict[str, Trip] = {}  # card_id -> active trip
-        
+
         # Initialize system
         self._initialize_stations()
         self._initialize_trains()
-        self._create_default_users()
+        self._load_persisted_data()   # load DB users/cards/trips first
+        self._create_default_users()  # create defaults only if missing
     
     def _initialize_stations(self):
         """Initialize BART stations with GPS coordinates"""
@@ -211,24 +221,86 @@ class BARTSystem:
                                                  stations[11] if len(stations) > 11 else stations[3], 7)
     
     def _create_default_users(self):
-        """Create default system users"""
-        # Create super admin
-        self.auth_service.register_user(
-            "superadmin", "admin123", "super@bart.gov",
-            "super_admin", name="System Administrator"
-        )
-        
-        # Create regular admin
-        self.auth_service.register_user(
-            "admin", "admin123", "admin@bart.gov",
-            "admin", name="John Admin", department="Operations"
-        )
-        
-        # Create demo passenger
-        self.auth_service.register_user(
-            "alice", "password123", "alice@example.com",
-            "passenger", name="Alice Johnson", passenger_type=PassengerType.STUDENT
-        )
+        """Create default system users if they don't already exist in the DB."""
+        defaults = [
+            ("superadmin", "admin123", "super@bart.gov",
+             "super_admin", {"name": "System Administrator"}),
+            ("admin", "admin123", "admin@bart.gov",
+             "admin", {"name": "John Admin", "department": "Operations"}),
+            ("alice", "password123", "alice@example.com",
+             "passenger", {"name": "Alice Johnson",
+                           "passenger_type": PassengerType.STUDENT}),
+        ]
+        for username, password, email, utype, kwargs in defaults:
+            if username not in self.auth_service.username_index:
+                user = self.auth_service.register_user(
+                    username, password, email, utype, **kwargs)
+                self.db.save_user(user)
+                # Give alice a starter card
+                if utype == "passenger":
+                    self.create_card_for_passenger(
+                        cast(Passenger, user), 50.00)
+
+    def _load_persisted_data(self):
+        """Load users, cards and trips saved in previous sessions."""
+        # ── Users ──
+        for row in self.db.load_users():
+            if row["username"] in self.auth_service.username_index:
+                continue  # already in memory (shouldn't happen, but guard)
+            role = row["role"]
+            if role == "PASSENGER":
+                pt = PassengerType[row["passenger_type"]] \
+                     if row["passenger_type"] else PassengerType.REGULAR
+                user = Passenger(row["user_id"], row["username"],
+                                 "__hashed__", row["email"],
+                                 row["name"], pt)
+            elif role == "ADMIN":
+                user = Admin(row["user_id"], row["username"],
+                             "__hashed__", row["email"],
+                             row["name"],
+                             row["department"] or "Operations")
+            elif role == "SUPER_ADMIN":
+                user = SuperAdmin(row["user_id"], row["username"],
+                                  "__hashed__", row["email"],
+                                  row["name"])
+            else:
+                continue
+            # Restore the real hash (bypass normal hashing)
+            user.password_hash = row["password_hash"]
+            user.created_at = datetime.fromisoformat(row["created_at"])
+            self.auth_service.users[user.user_id] = user
+            self.auth_service.username_index[user.username] = user
+
+        # ── Cards ──
+        for row in self.db.load_cards():
+            owner = self.auth_service.users.get(row["owner_id"])
+            if not owner or not isinstance(owner, Passenger):
+                continue
+            card = Card(row["card_id"], row["balance"])
+            card.status = CardStatus[row["status"]]
+            card.owner = owner
+            owner.link_card(card)
+            self.cards[card.card_id] = card
+
+        # ── Trips ──
+        for row in self.db.load_trips():
+            card = self.cards.get(row["card_id"])
+            passenger = self.auth_service.users.get(row["passenger_id"])
+            entry_st = self.stations.get(row["entry_station"])
+            if not card or not passenger or not entry_st:
+                continue
+            trip = Trip(row["trip_id"], card,
+                        datetime.fromisoformat(row["start_time"]), entry_st)
+            if row["exit_station"]:
+                trip.exit_station = self.stations.get(row["exit_station"])
+            if row["end_time"]:
+                trip.end_time = datetime.fromisoformat(row["end_time"])
+            if row["fare"] is not None:
+                trip.fare = row["fare"]
+            trip.status = TripStatus[row["status"]]
+            self.trips[trip.trip_id] = trip
+            if trip.status == TripStatus.ACTIVE:
+                self.active_trips[card.card_id] = trip
     
     # ========================================================================
     # AUTHENTICATION METHODS
@@ -238,13 +310,15 @@ class BARTSystem:
         """Login user"""
         return self.auth_service.login(username, password)
     
-    def register(self, username: str, password: str, email: str, 
+    def register(self, username: str, password: str, email: str,
                 name: str, passenger_type: PassengerType = PassengerType.REGULAR) -> Passenger:
-        """Register new passenger"""
-        return cast(Passenger, self.auth_service.register_user(
+        """Register new passenger and persist to database."""
+        passenger = cast(Passenger, self.auth_service.register_user(
             username, password, email, "passenger",
             name=name, passenger_type=passenger_type
         ))
+        self.db.save_user(passenger)
+        return passenger
     
     def get_current_user(self, username: str) -> Optional[User]:
         """Get user by username"""
@@ -255,12 +329,17 @@ class BARTSystem:
     # ========================================================================
     
     def create_card_for_passenger(self, passenger: Passenger, initial_balance: float = 0.0) -> Card:
-        """Create and link a card to a passenger"""
+        """Create, link, and persist a card for a passenger."""
         card_id = f"C{len(self.cards)+1:04d}"
         card = Card(card_id, initial_balance)
         card.owner = passenger
         passenger.link_card(card)
         self.cards[card_id] = card
+        self.db.save_card(card, passenger.user_id)
+        if initial_balance > 0:
+            self.db.save_transaction(
+                card_id, "TOPUP", initial_balance, initial_balance,
+                "Initial card load")
         return card
     
     def get_passenger_card(self, passenger: Passenger) -> Optional[Card]:
@@ -268,8 +347,12 @@ class BARTSystem:
         return passenger.card
     
     def top_up_card(self, card: Card, amount: float):
-        """Top up a card"""
+        """Top up a card and persist the new balance."""
         card.top_up(amount)
+        self.db.update_card(card)
+        self.db.save_transaction(
+            card.card_id, "TOPUP", amount, card.balance,
+            f"Top-up ${amount:.2f}")
     
     def get_card_transactions(self, card: Card) -> List:
         """Get card transaction history"""
@@ -279,15 +362,77 @@ class BARTSystem:
     # TRIP OPERATIONS
     # ========================================================================
     
+    # ========================================================================
+    # SERVICE HOURS
+    # ========================================================================
+
+    @staticmethod
+    def is_service_hours() -> bool:
+        """BART operates 5:00 AM – 12:30 AM daily."""
+        mins = datetime.now().hour * 60 + datetime.now().minute
+        return not (30 <= mins < 300)   # suspended 12:30 AM – 4:59 AM
+
+    def _get_system_admin(self) -> Optional["SuperAdmin"]:
+        for u in self.auth_service.users.values():
+            if isinstance(u, SuperAdmin):
+                return u
+        return None
+
+    def run_service_hours_check(self) -> str:
+        """
+        Enforce nightly train suspension / morning resumption.
+        Returns 'suspended', 'resumed', or 'no_change'.
+        """
+        sa = self._get_system_admin()
+        if not sa:
+            return 'no_change'
+        in_service = self.is_service_hours()
+        if not in_service:
+            running = [t for t in self.trains.values()
+                       if t.status == TrainStatus.RUNNING]
+            if running:
+                for t in running:
+                    t.update_status(TrainStatus.OUT_OF_SERVICE)
+                self.admin_create_alert(
+                    sa, AlertType.CLOSURE,
+                    "Night Service Suspended",
+                    "All BART trains suspended 12:30 AM – 5:00 AM. "
+                    "Regular service resumes at 5:00 AM.",
+                    list(self.stations.values())
+                )
+                return 'suspended'
+        else:
+            suspended = [t for t in self.trains.values()
+                         if t.status == TrainStatus.OUT_OF_SERVICE]
+            if suspended:
+                for t in suspended:
+                    t.update_status(TrainStatus.RUNNING)
+                for a in self.alerts.values():
+                    if a.is_active and "Night Service" in a.title:
+                        a.close_alert()
+                self.admin_create_alert(
+                    sa, AlertType.MAINTENANCE,
+                    "Morning Service Active",
+                    "All BART trains are back in service.",
+                    list(self.stations.values())
+                )
+                return 'resumed'
+        return 'no_change'
+
     def tap_entry(self, card: Card, station: Station) -> Trip:
         """
         Handle entry tap (Passenger operation)
-        
+
         Validates:
+        - Service hours (5:00 AM – 12:30 AM)
         - Card is active
         - Station is open
         - No existing active trip
         """
+        if not self.is_service_hours():
+            raise ValueError(
+                "BART is not in service (12:30 AM – 5:00 AM). "
+                "Service resumes at 5:00 AM.")
         if not card.is_active():
             raise ValueError("Card is frozen or expired")
         
@@ -309,7 +454,8 @@ class BARTSystem:
         
         self.trips[trip_id] = trip
         self.active_trips[card.card_id] = trip
-        
+        self.db.save_trip(trip)
+
         return trip
     
     def tap_exit(self, card: Card, station: Station) -> Tuple[Trip, float]:
@@ -354,7 +500,14 @@ class BARTSystem:
         
         # Remove from active trips
         del self.active_trips[card.card_id]
-        
+
+        # Persist updated card balance and closed trip
+        self.db.update_card(card)
+        self.db.save_transaction(
+            card.card_id, "FARE", -fare, card.balance,
+            f"Fare {trip.entry_station.name} → {station.name}")
+        self.db.save_trip(trip)
+
         return trip, fare
     
     def get_passenger_trips(self, passenger: Passenger) -> List[Trip]:
@@ -453,13 +606,23 @@ class BARTSystem:
         
         station.status = status
     
-    def admin_close_station(self, admin: AdminUser, station: Station):
-        """Close station (Admin only)"""
+    def admin_close_station(self, admin: AdminUser, station: Station,
+                            reason: str = "") -> Optional[ServiceAlert]:
+        """Close station (Admin only) and optionally create a closure alert."""
         self.admin_update_station_status(admin, station, StationStatus.CLOSED)
-    
+        if reason:
+            return self.admin_create_alert(
+                admin, AlertType.CLOSURE,
+                f"{station.name} Station Closed",
+                reason, [station])
+        return None
+
     def admin_open_station(self, admin: AdminUser, station: Station):
-        """Open station (Admin only)"""
+        """Open station and close any active closure alerts for it."""
         self.admin_update_station_status(admin, station, StationStatus.OPEN)
+        for a in self.alerts.values():
+            if a.is_active and station in a.affected_stations:
+                a.close_alert()
     
     # ========================================================================
     # ADMIN OPERATIONS - Train Management
@@ -526,6 +689,22 @@ class BARTSystem:
         
         alert.close_alert()
     
+    def admin_update_train_status_with_alert(
+            self, admin: AdminUser, train: "Train",
+            status: TrainStatus, reason: str = "") -> Optional[ServiceAlert]:
+        """Update train status and, for DELAYED, auto-create a service alert."""
+        if not admin.has_permission(UserRole.ADMIN):
+            raise PermissionError("Admin access required")
+        train.update_status(status)
+        alert = None
+        if status == TrainStatus.DELAYED and reason:
+            affected = [s for s in self.stations.values() if s.is_operational()][:5]
+            alert = self.admin_create_alert(
+                admin, AlertType.DELAY,
+                f"Train {train.train_id} Delayed — {train.line}",
+                reason, affected)
+        return alert
+
     def admin_get_all_alerts(self, admin: AdminUser) -> List[ServiceAlert]:
         """Get all alerts (Admin only)"""
         if not admin.has_permission(UserRole.ADMIN):

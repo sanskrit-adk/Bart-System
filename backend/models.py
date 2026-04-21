@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional, List, Union, TYPE_CHECKING
 from enum import Enum
 import hashlib
+import re
 
 
 # ============================================================================
@@ -74,6 +75,105 @@ class AlertType(Enum):
     CLOSURE = "CLOSURE"
     ROUTE_CHANGE = "ROUTE_CHANGE"
     MAINTENANCE = "MAINTENANCE"
+
+
+# ============================================================================
+# INPUT VALIDATION
+# ============================================================================
+
+class InputValidator:
+    """Centralised input validation for all user-facing registration fields."""
+
+    _USERNAME = re.compile(r'^[A-Za-z][A-Za-z0-9_]{2,29}$')
+    _NAME     = re.compile(r"^[A-Za-z][A-Za-z\s'\-]{1,49}$")
+
+    # General email: starts with alphanumeric, allows letters/digits/._%-+ before @,
+    # valid domain with at least 2-char TLD. Blocks ?, !, #, etc.
+    _EMAIL = re.compile(
+        r'^[a-zA-Z0-9][a-zA-Z0-9._%+\-]*@[a-zA-Z0-9][a-zA-Z0-9.\-]*\.[a-zA-Z]{2,}$'
+    )
+    # Gmail local part (before + or @): 6-30 chars, only a-z / 0-9 / dot,
+    # must start and end with alphanumeric, no consecutive dots.
+    _GMAIL_LOCAL = re.compile(r'^[a-z0-9](?:[a-z0-9.]{4,28})[a-z0-9]$')
+    _GMAIL_DOMAINS = {'gmail.com', 'googlemail.com'}
+
+    @classmethod
+    def validate_username(cls, username: str) -> str:
+        """3-30 chars, starts with letter, alphanumeric + underscore only."""
+        if not username:
+            raise ValueError("Username is required.")
+        if not cls._USERNAME.match(username):
+            raise ValueError(
+                "Username must be 3–30 characters, start with a letter, "
+                "and contain only letters, numbers, or underscores (no spaces)."
+            )
+        return username
+
+    @classmethod
+    def validate_password(cls, password: str) -> str:
+        """Minimum 6 characters."""
+        if not password:
+            raise ValueError("Password is required.")
+        if len(password) < 6:
+            raise ValueError("Password must be at least 6 characters.")
+        return password
+
+    @classmethod
+    def validate_email(cls, email: str) -> str:
+        """Validate email with stricter rules for Gmail addresses."""
+        email = (email or "").strip().lower()
+        if not email:
+            raise ValueError("Email is required.")
+
+        # General format check (blocks ?, !, # and other invalid chars)
+        if not cls._EMAIL.match(email):
+            raise ValueError(
+                "Enter a valid email address (e.g. user@example.com). "
+                "Only letters, numbers, and . _ % + - are allowed before the @."
+            )
+
+        local, domain = email.split('@', 1)
+
+        # Gmail-specific rules
+        if domain in cls._GMAIL_DOMAINS:
+            base = local.split('+')[0]  # strip optional +tag
+            if '..' in base:
+                raise ValueError(
+                    "Gmail addresses cannot contain consecutive dots.")
+            if base.startswith('.') or base.endswith('.'):
+                raise ValueError(
+                    "Gmail addresses cannot start or end with a dot.")
+            # Only a-z, 0-9, dot allowed in Gmail usernames
+            if not re.match(r'^[a-z0-9.]+$', base):
+                raise ValueError(
+                    "Gmail usernames can only contain letters (a–z), "
+                    "numbers (0–9), and dots. Special characters are not allowed."
+                )
+            if len(base) < 6:
+                raise ValueError(
+                    "Gmail usernames must be at least 6 characters long.")
+            if len(base) > 30:
+                raise ValueError(
+                    "Gmail usernames must be 30 characters or fewer.")
+
+        return email
+
+    @classmethod
+    def validate_name(cls, name: str) -> str:
+        """2-50 chars, letters/spaces/hyphens/apostrophes, starts with letter."""
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Full name is required.")
+        if len(name) < 2:
+            raise ValueError("Name must be at least 2 characters.")
+        if len(name) > 50:
+            raise ValueError("Name must be 50 characters or fewer.")
+        if not cls._NAME.match(name):
+            raise ValueError(
+                "Name must start with a letter and contain only "
+                "letters, spaces, hyphens, or apostrophes."
+            )
+        return name
 
 
 # ============================================================================
