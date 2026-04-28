@@ -11,51 +11,73 @@ from backend.bart_system import BARTSystem
 from backend.models import (
     User, Passenger, Admin, SuperAdmin,
     Station, Train, Card, PassengerType,
-    StationStatus, TrainStatus, AlertType, InputValidator
+    StationStatus, TrainStatus, AlertType, InputValidator, CardStatus
 )
 
 # ── THEME ──────────────────────────────────────────────────
-BG       = "#0d0d1a"
-SURFACE  = "#1a1a2e"
-SURFACE2 = "#111128"
-BORDER   = "#252545"
+BG       = "#0f1117"
+SURFACE  = "#171b26"
+SURFACE2 = "#1e2230"
+BORDER   = "#2a2f3e"
 
-BLUE   = "#4f72ff"
-CYAN   = "#00d4ff"
-GREEN  = "#22d97e"
-YELLOW = "#f5c518"
-RED    = "#ef4444"
-PURPLE = "#a855f7"
-ORANGE = "#f97316"
-TEAL   = "#14b8a6"
+BLUE   = "#4d90fe"
+CYAN   = "#60b8d4"
+GREEN  = "#48bb78"
+YELLOW = "#ecc94b"
+RED    = "#fc8181"
+PURPLE = "#9f7aea"
+ORANGE = "#ed8936"
+TEAL   = "#38b2ac"
 
-TEXT     = "#f0f0ff"
-TEXT_DIM = "#6a6a9a"
+TEXT     = "#e2e8f0"
+TEXT_DIM = "#718096"
 
-BART_BLUE = "#003f87"
-BART_RED  = "#e31c23"
-F = "Helvetica"
+BART_BLUE = "#1a56db"
+BART_RED  = "#e02424"
+F = "Segoe UI"
 
 
 def configure_styles():
     s = ttk.Style()
     s.theme_use('clam')
     s.configure('D.Treeview', background=SURFACE, foreground=TEXT,
-        fieldbackground=SURFACE, rowheight=34, font=(F, 10), borderwidth=0)
-    s.configure('D.Treeview.Heading', background=SURFACE2, foreground=CYAN,
-        font=(F, 10, 'bold'), relief='flat', padding=10)
-    s.map('D.Treeview', background=[('selected', BLUE)], foreground=[('selected', TEXT)])
+        fieldbackground=SURFACE, rowheight=36, font=(F, 10), borderwidth=0)
+    s.configure('D.Treeview.Heading', background=SURFACE2, foreground=TEXT_DIM,
+        font=(F, 9, 'bold'), relief='flat', padding=[12, 10])
+    s.map('D.Treeview', background=[('selected', BLUE)], foreground=[('selected', '#fff')])
     s.configure('D.Vertical.TScrollbar', background=SURFACE2,
-        troughcolor=SURFACE, arrowcolor=TEXT_DIM, borderwidth=0)
+        troughcolor=BG, arrowcolor=BORDER, borderwidth=0, width=6)
     s.configure('D.TCombobox', fieldbackground=SURFACE2, background=SURFACE2,
-        foreground=TEXT, selectbackground=BLUE, selectforeground=TEXT,
-        arrowcolor=CYAN, padding=8)
+        foreground=TEXT, selectbackground=BLUE, selectforeground='#fff',
+        arrowcolor=TEXT_DIM, padding=8, relief='flat')
     s.map('D.TCombobox', fieldbackground=[('readonly', SURFACE2)],
         foreground=[('readonly', TEXT)], selectbackground=[('readonly', BLUE)])
     s.configure('D.TNotebook', background=BG, borderwidth=0, tabmargins=[0, 0, 0, 0])
-    s.configure('D.TNotebook.Tab', background=SURFACE2, foreground=TEXT_DIM,
-        padding=[20, 10], font=(F, 10, 'bold'), borderwidth=0)
-    s.map('D.TNotebook.Tab', background=[('selected', BLUE)], foreground=[('selected', TEXT)])
+    s.configure('D.TNotebook.Tab', background=BG, foreground=TEXT_DIM,
+        padding=[18, 10], font=(F, 10), borderwidth=0)
+    s.map('D.TNotebook.Tab', background=[('selected', SURFACE)],
+          foreground=[('selected', TEXT)])
+
+
+def bind_scroll(widget):
+    """Bind smooth mousewheel scrolling to any widget with yview."""
+    def _scroll(e):
+        try:
+            widget.yview_scroll(int(-1 * (e.delta / 120)), 'units')
+        except Exception:
+            pass
+    widget.bind('<MouseWheel>', _scroll)
+
+
+def bind_canvas_scroll(canvas):
+    """Bind mousewheel to a canvas only while the mouse is over it."""
+    def _scroll(e):
+        try:
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units')
+        except Exception:
+            pass
+    canvas.bind('<Enter>', lambda e: canvas.bind_all('<MouseWheel>', _scroll))
+    canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
 
 
 def start_live_clock(root, label):
@@ -71,13 +93,13 @@ def make_entry(parent, show=None):
     wrap = tk.Frame(parent, bg=BORDER, padx=1, pady=1)
     inner = tk.Frame(wrap, bg=SURFACE2)
     inner.pack(fill=tk.X)
-    kw = dict(font=(F, 12), bg=SURFACE2, fg=TEXT, relief=tk.FLAT,
-              insertbackground=CYAN, bd=0)
+    kw = dict(font=(F, 11), bg=SURFACE2, fg=TEXT, relief=tk.FLAT,
+              insertbackground=BLUE, bd=0)
     if show:
         kw['show'] = show
     e = tk.Entry(inner, **kw)
-    e.pack(fill=tk.X, padx=12, pady=10)
-    e.bind('<FocusIn>',  lambda _: wrap.config(bg=CYAN))
+    e.pack(fill=tk.X, padx=14, pady=11)
+    e.bind('<FocusIn>',  lambda _: wrap.config(bg=BLUE))
     e.bind('<FocusOut>', lambda _: wrap.config(bg=BORDER))
     return wrap, e
 
@@ -88,14 +110,18 @@ def dark_combo(parent, var, values, width=30):
 
 
 def card(parent, title, icon, accent, **pk):
-    """Dark section card with a colored title bar."""
-    f = tk.Frame(parent, bg=SURFACE)
+    """Clean panel with thin top accent line and subtle border."""
+    f = tk.Frame(parent, bg=BORDER, padx=1, pady=1)
     f.pack(**pk)
-    hdr = tk.Frame(f, bg=accent, padx=16, pady=10)
+    inner = tk.Frame(f, bg=SURFACE)
+    inner.pack(fill=tk.BOTH, expand=True)
+    tk.Frame(inner, bg=accent, height=2).pack(fill=tk.X)
+    hdr = tk.Frame(inner, bg=SURFACE, padx=16, pady=11)
     hdr.pack(fill=tk.X)
     tk.Label(hdr, text=f"{icon}  {title}", font=(F, 11, 'bold'),
-             bg=accent, fg='white').pack(anchor=tk.W)
-    body = tk.Frame(f, bg=SURFACE, padx=16, pady=14)
+             bg=SURFACE, fg=TEXT).pack(anchor=tk.W)
+    tk.Frame(inner, bg=BORDER, height=1).pack(fill=tk.X)
+    body = tk.Frame(inner, bg=SURFACE, padx=16, pady=14)
     body.pack(fill=tk.BOTH, expand=True)
     return f, body
 
@@ -104,10 +130,14 @@ def card(parent, title, icon, accent, **pk):
 
 class Toast:
     def __init__(self, root, msg, color=GREEN, dur=3000):
-        self.root, self.dur, self._y = root, dur, -80
-        self.f = tk.Frame(root, bg=color, padx=32, pady=18)
-        tk.Label(self.f, text=msg, font=(F, 12, 'bold'),
-                 bg=color, fg='white', wraplength=560).pack()
+        self.root, self.dur, self._y = root, dur, -70
+        self.f = tk.Frame(root, bg=SURFACE2, padx=28, pady=14,
+                          highlightbackground=color, highlightthickness=2)
+        row = tk.Frame(self.f, bg=SURFACE2)
+        row.pack()
+        tk.Frame(row, bg=color, width=4, height=20).pack(side=tk.LEFT, padx=(0, 12))
+        tk.Label(row, text=msg, font=(F, 11), bg=SURFACE2, fg=TEXT,
+                 wraplength=560).pack(side=tk.LEFT)
         self.f.place(relx=.5, rely=0, anchor='n', y=self._y)
         self.f.lift()
         self._in()
@@ -141,9 +171,9 @@ class ModernButton(tk.Button):
         self._bg = kw.get('bg', BLUE)
         super().__init__(parent, relief=tk.FLAT, bd=0,
                          highlightthickness=0, cursor='hand2', **kw)
-        self.bind('<Enter>',          lambda e: self._s(40))
+        self.bind('<Enter>',          lambda e: self._s(22))
         self.bind('<Leave>',          lambda e: self._s(0))
-        self.bind('<ButtonPress-1>',  lambda e: self._s(-30))
+        self.bind('<ButtonPress-1>',  lambda e: self._s(-18))
         self.bind('<ButtonRelease-1>',lambda e: self._s(0))
 
     def _s(self, amt):
@@ -190,125 +220,108 @@ class BARTLoginApp:
     def show_login_screen(self):
         for w in self.root.winfo_children():
             w.destroy()
-        # Center window on screen at ~half-screen size
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
-        w, h = min(980, sw - 80), min(680, sh - 80)
+        w, h = min(960, sw - 80), min(660, sh - 80)
         x, y = (sw - w) // 2, (sh - h) // 2
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         self.root.resizable(True, True)
-        self.root.minsize(800, 580)
-
-        # ── Top strip: window controls ─────────────────────
-        topbar = tk.Frame(self.root, bg=SURFACE2, height=30)
-        topbar.pack(fill=tk.X)
-        topbar.pack_propagate(False)
-
-        self._fullscreen = False
-        def _toggle_fullscreen():
-            self._fullscreen = not self._fullscreen
-            if self._fullscreen:
-                self.root.state('zoomed')
-                fs_btn.config(text="⧉  Windowed")
-            else:
-                self.root.state('normal')
-                self.root.geometry(f"{w}x{h}+{x}+{y}")
-                fs_btn.config(text="⛶  Fullscreen")
-
-        fs_btn = tk.Button(topbar, text="⛶  Fullscreen", font=(F, 9),
-            bg=SURFACE2, fg=TEXT_DIM, relief=tk.FLAT, bd=0, cursor='hand2',
-            activebackground=SURFACE, activeforeground=CYAN,
-            command=_toggle_fullscreen)
-        fs_btn.pack(side=tk.RIGHT, padx=12, pady=4)
-        tk.Label(topbar, text="BART Transportation System", font=(F, 9),
-                 bg=SURFACE2, fg=TEXT_DIM).pack(side=tk.LEFT, padx=12)
+        self.root.minsize(820, 560)
+        self.root.configure(bg=BG)
 
         wrap = tk.Frame(self.root, bg=BG)
         wrap.pack(fill=tk.BOTH, expand=True)
 
-        # Left branding panel
-        left = tk.Frame(wrap, bg=BART_BLUE, width=340)
+        # ── Left branding panel ─────────────────────────────
+        left = tk.Frame(wrap, bg=SURFACE, width=320)
         left.pack(side=tk.LEFT, fill=tk.Y)
         left.pack_propagate(False)
-        tk.Frame(left, bg=BART_RED, height=5).pack(fill=tk.X)
+        tk.Frame(left, bg=BART_BLUE, height=3).pack(fill=tk.X)
 
-        brand = tk.Frame(left, bg=BART_BLUE)
-        brand.pack(expand=True, fill=tk.BOTH, padx=40, pady=50)
+        brand = tk.Frame(left, bg=SURFACE)
+        brand.pack(expand=True, fill=tk.BOTH, padx=36, pady=48)
 
         self.logo_label = tk.Label(brand, text="BART",
-            font=(F, 64, 'bold'), bg=BART_BLUE, fg='white')
+            font=(F, 56, 'bold'), bg=SURFACE, fg=BLUE)
         self.logo_label.pack(anchor=tk.W)
         tk.Label(brand, text="Bay Area Rapid Transit",
-            font=(F, 13), bg=BART_BLUE, fg="#99bbff").pack(anchor=tk.W)
-        tk.Frame(brand, bg=BART_RED, height=3, width=70).pack(anchor=tk.W, pady=22)
+            font=(F, 12), bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(2, 0))
+        tk.Frame(brand, bg=BLUE, height=2, width=48).pack(anchor=tk.W, pady=20)
 
-        for icon, txt in [("🚇", "15 Stations across the Bay"),
-                           ("🚆", "6 Active Train Lines"),
-                           ("💳", "Clipper Card Support"),
-                           ("📍", "Real-time Train Tracking")]:
-            r = tk.Frame(brand, bg=BART_BLUE)
-            r.pack(anchor=tk.W, pady=7)
-            tk.Label(r, text=icon, font=(F, 15), bg=BART_BLUE).pack(side=tk.LEFT)
-            tk.Label(r, text=f"  {txt}", font=(F, 11),
-                     bg=BART_BLUE, fg="#b0c8ff").pack(side=tk.LEFT)
+        for icon, txt in [("🚇", "15 Stations"),
+                           ("🚆", "6 Train Lines"),
+                           ("💳", "Clipper Card"),
+                           ("📍", "Live Tracking")]:
+            r = tk.Frame(brand, bg=SURFACE)
+            r.pack(anchor=tk.W, pady=5)
+            tk.Label(r, text=icon, font=(F, 13), bg=SURFACE, fg=TEXT).pack(side=tk.LEFT)
+            tk.Label(r, text=f"  {txt}", font=(F, 10),
+                     bg=SURFACE, fg=TEXT_DIM).pack(side=tk.LEFT)
 
-        tk.Label(brand, text="© 2026 BART System", font=(F, 9),
-                 bg=BART_BLUE, fg="#446699").pack(side=tk.BOTTOM, anchor=tk.W)
+        tk.Label(brand, text="© 2026 BART System", font=(F, 8),
+                 bg=SURFACE, fg=TEXT_DIM).pack(side=tk.BOTTOM, anchor=tk.W)
 
-        # Right form panel
-        right = tk.Frame(wrap, bg=SURFACE)
+        # Thin separator
+        tk.Frame(wrap, bg=BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y)
+
+        # ── Right form panel ────────────────────────────────
+        right = tk.Frame(wrap, bg=BG)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        form = tk.Frame(right, bg=SURFACE)
+        form = tk.Frame(right, bg=BG)
         form.place(relx=.5, rely=.5, anchor='center')
+        form.config(width=340)
 
-        tk.Label(form, text="Welcome Back", font=(F, 28, 'bold'),
-                 bg=SURFACE, fg=TEXT).pack(anchor=tk.W)
-        tk.Label(form, text="Sign in to your BART account",
-                 font=(F, 11), bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(4, 30))
+        tk.Label(form, text="Sign in", font=(F, 26, 'bold'),
+                 bg=BG, fg=TEXT).pack(anchor=tk.W)
+        tk.Label(form, text="Welcome back to BART",
+                 font=(F, 11), bg=BG, fg=TEXT_DIM).pack(anchor=tk.W, pady=(3, 28))
 
-        tk.Label(form, text="USERNAME", font=(F, 9, 'bold'),
-                 bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(0, 5))
+        tk.Label(form, text="USERNAME", font=(F, 8, 'bold'),
+                 bg=BG, fg=TEXT_DIM).pack(anchor=tk.W, pady=(0, 4))
         uf, self.username_entry = make_entry(form)
-        uf.pack(fill=tk.X, pady=(0, 16))
+        uf.pack(fill=tk.X, pady=(0, 14))
 
-        tk.Label(form, text="PASSWORD", font=(F, 9, 'bold'),
-                 bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(0, 5))
+        tk.Label(form, text="PASSWORD", font=(F, 8, 'bold'),
+                 bg=BG, fg=TEXT_DIM).pack(anchor=tk.W, pady=(0, 4))
         pf, self.password_entry = make_entry(form, show='●')
-        pf.pack(fill=tk.X, pady=(0, 28))
+        pf.pack(fill=tk.X, pady=(0, 22))
 
-        self.login_error_label = tk.Label(form, text="", font=(F, 9, 'bold'),
-            bg=SURFACE, fg=RED, wraplength=340)
-        self.login_error_label.pack(anchor=tk.W, pady=(0, 8))
+        self.login_error_label = tk.Label(form, text="", font=(F, 9),
+            bg=BG, fg=RED, wraplength=340)
+        self.login_error_label.pack(anchor=tk.W, pady=(0, 6))
 
-        ModernButton(form, text="  SIGN IN  ", font=(F, 13, 'bold'),
-            bg=BLUE, fg='white', padx=10, pady=14,
-            command=self.handle_login).pack(fill=tk.X, pady=(0, 10))
-        ModernButton(form, text="Create Account", font=(F, 11),
-            bg=SURFACE2, fg=CYAN, padx=10, pady=12,
-            command=self.show_register_screen).pack(fill=tk.X, pady=(0, 8))
-        ModernButton(form, text="👤  Continue as Guest", font=(F, 10),
-            bg=SURFACE2, fg=TEXT_DIM, padx=10, pady=10,
-            command=self.open_guest_mode).pack(fill=tk.X, pady=(0, 22))
+        ModernButton(form, text="Sign In", font=(F, 11, 'bold'),
+            bg=BLUE, fg='white', padx=10, pady=13,
+            command=self.handle_login).pack(fill=tk.X, pady=(0, 8))
+        ModernButton(form, text="Create Account", font=(F, 10),
+            bg=SURFACE2, fg=TEXT, padx=10, pady=11,
+            command=self.show_register_screen).pack(fill=tk.X, pady=(0, 6))
+        ModernButton(form, text="Continue as Guest", font=(F, 10),
+            bg=BG, fg=TEXT_DIM, padx=10, pady=9,
+            command=self.open_guest_mode).pack(fill=tk.X, pady=(0, 20))
 
-        demo = tk.Frame(form, bg=SURFACE2, padx=16, pady=12)
+        demo = tk.Frame(form, bg=SURFACE2, padx=14, pady=12)
         demo.pack(fill=tk.X)
-        tk.Label(demo, text="DEMO ACCOUNTS", font=(F, 8, 'bold'),
-                 bg=SURFACE2, fg=CYAN).pack(anchor=tk.W, pady=(0, 8))
+        tk.Label(demo, text="QUICK LOGIN", font=(F, 8, 'bold'),
+                 bg=SURFACE2, fg=TEXT_DIM).pack(anchor=tk.W, pady=(0, 8))
         for role, user, pwd, col in [
-            ("Passenger",  "alice",      "password123", TEXT),
+            ("Passenger",  "alice",      "password123", GREEN),
             ("Admin",      "admin",      "admin123",    ORANGE),
             ("Super Admin","superadmin", "admin123",    PURPLE),
         ]:
             r = tk.Frame(demo, bg=SURFACE2)
-            r.pack(anchor=tk.W, pady=2)
-            tk.Label(r, text=f"{role}:", font=(F, 9, 'bold'), bg=SURFACE2, fg=col, width=12, anchor=tk.W).pack(side=tk.LEFT)
+            r.pack(anchor=tk.W, pady=3)
+            tk.Frame(r, bg=col, width=3, height=16).pack(side=tk.LEFT, padx=(0, 8))
+            tk.Label(r, text=f"{role}:", font=(F, 9, 'bold'), bg=SURFACE2,
+                     fg=TEXT_DIM, width=11, anchor=tk.W).pack(side=tk.LEFT)
             def _fill(u=user, p=pwd):
                 self.username_entry.delete(0, tk.END); self.username_entry.insert(0, u)
                 self.password_entry.delete(0, tk.END); self.password_entry.insert(0, p)
             tk.Button(r, text=f"{user} / {pwd}", font=(F, 9), bg=SURFACE2, fg=TEXT_DIM,
-                      relief=tk.FLAT, bd=0, cursor='hand2', activebackground=SURFACE,
-                      activeforeground=CYAN, command=_fill).pack(side=tk.LEFT)
+                      relief=tk.FLAT, bd=0, cursor='hand2',
+                      activebackground=BORDER, activeforeground=TEXT,
+                      command=_fill).pack(side=tk.LEFT)
 
         self.username_entry.bind('<Return>', lambda e: self.password_entry.focus())
         self.password_entry.bind('<Return>', lambda e: self.handle_login())
@@ -368,35 +381,128 @@ class BARTLoginApp:
         dlg.transient(self.root)
         dlg.grab_set()
 
-        tk.Frame(dlg, bg=BLUE, height=5).pack(fill=tk.X)
-        tk.Label(dlg, text="Create Passenger Account",
-                 font=(F, 16, 'bold'), bg=SURFACE, fg=TEXT).pack(pady=(14, 2))
-        tk.Label(dlg, text="All fields are required", font=(F, 9),
+        tk.Frame(dlg, bg=BLUE, height=3).pack(fill=tk.X)
+        tk.Label(dlg, text="Create Account", font=(F, 16, 'bold'),
+                 bg=SURFACE, fg=TEXT).pack(pady=(16, 2))
+        tk.Label(dlg, text="Fill in all required fields", font=(F, 9),
                  bg=SURFACE, fg=TEXT_DIM).pack(pady=(0, 8))
 
+        # ── Scrollable canvas body ─────────────────────────────
+        canvas = tk.Canvas(dlg, bg=SURFACE, highlightthickness=0, bd=0)
+        vsb = ttk.Scrollbar(dlg, orient='vertical', command=canvas.yview,
+                             style='D.Vertical.TScrollbar')
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        wrap = tk.Frame(canvas, bg=SURFACE, padx=36)
+        win_id = canvas.create_window((0, 0), window=wrap, anchor='nw')
+
+        def _on_wrap_resize(e):
+            canvas.configure(scrollregion=canvas.bbox('all'))
+        def _on_canvas_resize(e):
+            canvas.itemconfig(win_id, width=e.width)
+        wrap.bind('<Configure>', _on_wrap_resize)
+        canvas.bind('<Configure>', _on_canvas_resize)
+
+        bind_canvas_scroll(canvas)
+
+        # ── Role selector ──────────────────────────────────────
+        tk.Label(wrap, text="ROLE", font=(F, 8, 'bold'),
+                 bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(8, 6))
+        role_var = tk.StringVar(value="passenger")
+        role_colors = {"passenger": BLUE, "admin": ORANGE, "super_admin": PURPLE}
+        role_row = tk.Frame(wrap, bg=SURFACE)
+        role_row.pack(fill=tk.X, pady=(0, 14))
+        role_btns = {}
+        for rval, rlbl in [("passenger","Passenger"),("admin","Admin"),("super_admin","Super Admin")]:
+            b = tk.Button(role_row, text=rlbl, font=(F, 10, 'bold'),
+                bg=role_colors[rval] if rval == "passenger" else SURFACE2,
+                fg='white' if rval == "passenger" else TEXT_DIM,
+                relief=tk.FLAT, bd=0, cursor='hand2', padx=16, pady=8,
+                activebackground=role_colors[rval], activeforeground='white')
+            b.pack(side=tk.LEFT, padx=(0, 6))
+            role_btns[rval] = b
+
+        # ── Common fields ──────────────────────────────────────
         fields = {}
         err_labels = {}
-        wrap = tk.Frame(dlg, bg=SURFACE, padx=36)
-        wrap.pack(fill=tk.X)
-
-        field_specs = [
-            ("Full Name",    "name",     None,  "e.g. Alice Johnson"),
-            ("Username",     "username", None,  "3–30 chars, letters/numbers/_"),
-            ("Password",     "password", '●',   "Minimum 6 characters"),
-            ("Email",        "email",    None,  "e.g. user@example.com"),
-        ]
-
-        for lbl, key, show, hint in field_specs:
+        for lbl, key, show, hint in [
+            ("Full Name",  "name",     None, "e.g. Alice Johnson"),
+            ("Username",   "username", None, "3–30 chars, letters/numbers/_"),
+            ("Password",   "password", '●',  "Minimum 6 characters"),
+            ("Email",      "email",    None, "e.g. user@example.com"),
+        ]:
             tk.Label(wrap, text=lbl.upper(), font=(F, 8, 'bold'),
                      bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(8, 2))
             wf, en = make_entry(wrap, show=show)
             wf.pack(fill=tk.X)
             tk.Label(wrap, text=hint, font=(F, 8), bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W)
-            err_lbl = tk.Label(wrap, text="", font=(F, 8, 'bold'), bg=SURFACE, fg=RED)
+            err_lbl = tk.Label(wrap, text="", font=(F, 8), bg=SURFACE, fg=RED)
             err_lbl.pack(anchor=tk.W)
             fields[key] = en
             err_labels[key] = err_lbl
 
+        # ── Extra section — stable container, contents swapped ─
+        extra = tk.Frame(wrap, bg=SURFACE)
+        extra.pack(fill=tk.X)
+
+        ptype_var = tk.StringVar(value="REGULAR")
+        dept_entry_ref = [None]   # mutable ref so inner functions can update it
+
+        def _show_passenger_extra():
+            for w in extra.winfo_children(): w.destroy()
+            tk.Label(extra, text="PASSENGER TYPE", font=(F, 8, 'bold'),
+                     bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(12, 6))
+            tf = tk.Frame(extra, bg=SURFACE)
+            tf.pack(anchor=tk.W)
+            for pt, col in [("REGULAR", BLUE), ("STUDENT", TEAL), ("SENIOR", ORANGE)]:
+                tk.Radiobutton(tf, text=pt, variable=ptype_var, value=pt,
+                               font=(F, 10, 'bold'), bg=SURFACE, fg=TEXT_DIM,
+                               selectcolor=col, activebackground=SURFACE,
+                               indicatoron=0, padx=12, pady=7, relief=tk.FLAT,
+                               bd=1, highlightthickness=0).pack(side=tk.LEFT, padx=(0, 6))
+
+        def _show_admin_extra():
+            for w in extra.winfo_children(): w.destroy()
+            tk.Label(extra, text="DEPARTMENT", font=(F, 8, 'bold'),
+                     bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(12, 2))
+            wf, de = make_entry(extra)
+            de.insert(0, "Operations")
+            wf.pack(fill=tk.X)
+            tk.Label(extra, text="e.g. Operations, Safety, Finance",
+                     font=(F, 8), bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W)
+            dept_entry_ref[0] = de
+
+        def _show_superadmin_extra():
+            for w in extra.winfo_children(): w.destroy()
+            info = tk.Frame(extra, bg=SURFACE2, padx=14, pady=10)
+            info.pack(fill=tk.X, pady=(12, 0))
+            tk.Label(info, text="Full system access — no additional fields required.",
+                     font=(F, 9), bg=SURFACE2, fg=TEXT_DIM,
+                     wraplength=380, justify=tk.LEFT).pack(anchor=tk.W)
+
+        def _sel_role(v):
+            role_var.set(v)
+            for k, btn in role_btns.items():
+                btn.config(bg=role_colors[k] if k == v else SURFACE2,
+                           fg='white' if k == v else TEXT_DIM)
+            err_global.config(text="")
+            if v == "passenger":   _show_passenger_extra()
+            elif v == "admin":     _show_admin_extra()
+            else:                  _show_superadmin_extra()
+
+        for rval in role_btns:
+            role_btns[rval].config(command=lambda v=rval: _sel_role(v))
+
+        _show_passenger_extra()   # default
+
+        # ── Error + Submit — always below extra ────────────────
+        err_global = tk.Label(wrap, text="", font=(F, 9), bg=SURFACE,
+                              fg=RED, wraplength=400)
+        err_global.pack(anchor=tk.W, pady=(10, 0))
+
+        # ── Validators ────────────────────────────────────────
         validators = {
             "name":     InputValidator.validate_name,
             "username": InputValidator.validate_username,
@@ -416,37 +522,44 @@ class BARTLoginApp:
         for key in fields:
             fields[key].bind('<FocusOut>', lambda e, k=key: validate_field(k))
 
-        tk.Label(wrap, text="ACCOUNT TYPE", font=(F, 8, 'bold'),
-                 bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W, pady=(14, 6))
-        type_var = tk.StringVar(value="REGULAR")
-        tf = tk.Frame(wrap, bg=SURFACE)
-        tf.pack(anchor=tk.W)
-        for pt, col in [("REGULAR", BLUE), ("STUDENT", TEAL), ("SENIOR", ORANGE)]:
-            tk.Radiobutton(tf, text=pt, variable=type_var, value=pt,
-                           font=(F, 10, 'bold'), bg=SURFACE, fg=TEXT_DIM,
-                           selectcolor=col, activebackground=SURFACE,
-                           indicatoron=0, padx=14, pady=7, relief=tk.FLAT,
-                           bd=1, highlightthickness=0).pack(side=tk.LEFT, padx=(0, 6))
-
         def register():
+            err_global.config(text="")
             all_valid = all(validate_field(k) for k in fields)
             if not all_valid:
+                err_global.config(text="Please fix the errors above before continuing.")
+                canvas.yview_moveto(0)
                 return
+            role = role_var.get()
+            uname = fields["username"].get().strip()
             try:
-                pt = PassengerType[type_var.get()]
-                uname = fields["username"].get().strip()
-                self.bart_system.register(
-                    uname, fields["password"].get(),
-                    fields["email"].get().strip(),
-                    fields["name"].get().strip(), pt)
+                if role == "passenger":
+                    pt = PassengerType[ptype_var.get()]
+                    self.bart_system.register(
+                        uname, fields["password"].get(),
+                        fields["email"].get().strip(),
+                        fields["name"].get().strip(), pt)
+                elif role == "admin":
+                    dept = (dept_entry_ref[0].get().strip()
+                            if dept_entry_ref[0] else "") or "Operations"
+                    self.bart_system.auth_service.register_user(
+                        uname, fields["password"].get(),
+                        fields["email"].get().strip(), "admin",
+                        name=fields["name"].get().strip(), department=dept)
+                else:
+                    self.bart_system.auth_service.register_user(
+                        uname, fields["password"].get(),
+                        fields["email"].get().strip(), "super_admin",
+                        name=fields["name"].get().strip())
                 dlg.destroy()
-                Toast(self.root, f"✓  Account created!  Sign in as  {uname}", color=GREEN)
+                label = {"passenger":"Passenger","admin":"Admin","super_admin":"Super Admin"}[role]
+                Toast(self.root, f"Account created — {label}: {uname}", color=GREEN)
             except Exception as e:
-                messagebox.showerror("Registration Failed", str(e))
+                err_global.config(text=f"✗  {e}")
+                canvas.yview_moveto(1)
 
-        ModernButton(wrap, text="CREATE ACCOUNT", font=(F, 12, 'bold'),
+        ModernButton(wrap, text="Create Account", font=(F, 11, 'bold'),
             bg=GREEN, fg='white', padx=10, pady=13,
-            command=register).pack(fill=tk.X, pady=(14, 20))
+            command=register).pack(fill=tk.X, pady=(14, 28))
 
     def open_dashboard(self):
         if isinstance(self.current_user, Passenger):
@@ -537,35 +650,29 @@ class PassengerDashboard:
 
     def _build(self):
         # ── Header ────────────────────────────────────────────
-        hdr = tk.Frame(self.root, bg=BART_BLUE, height=68)
+        hdr = tk.Frame(self.root, bg=SURFACE, height=62)
         hdr.pack(fill=tk.X)
         hdr.pack_propagate(False)
-        tk.Frame(hdr, bg=BART_RED, height=4).pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Frame(hdr, bg=BORDER, height=1).pack(fill=tk.X, side=tk.BOTTOM)
 
-        lf = tk.Frame(hdr, bg=BART_BLUE)
+        lf = tk.Frame(hdr, bg=SURFACE)
         lf.pack(side=tk.LEFT, padx=24)
-        tk.Label(lf, text="🚇 BART", font=(F, 22, 'bold'), bg=BART_BLUE, fg='white').pack(side=tk.LEFT)
+        tk.Label(lf, text="BART", font=(F, 18, 'bold'), bg=SURFACE, fg=BLUE).pack(side=tk.LEFT)
         badge_col = {PassengerType.REGULAR: BLUE, PassengerType.STUDENT: TEAL, PassengerType.SENIOR: ORANGE}
         bc = badge_col.get(self.passenger.passenger_type, BLUE)
-        tk.Label(lf, text=f"  {self.passenger.name}", font=(F, 13), bg=BART_BLUE, fg="#aaccff").pack(side=tk.LEFT, padx=(8, 0))
-        tk.Label(lf, text=f" {self.passenger.passenger_type.value} ", font=(F, 9, 'bold'),
-                 bg=bc, fg='white', padx=6, pady=3).pack(side=tk.LEFT, padx=8)
+        tk.Label(lf, text=f"  {self.passenger.name}", font=(F, 12),
+                 bg=SURFACE, fg=TEXT).pack(side=tk.LEFT, padx=(10, 0))
+        tk.Label(lf, text=f"  {self.passenger.passenger_type.value}  ", font=(F, 8, 'bold'),
+                 bg=bc, fg='white', padx=4, pady=2).pack(side=tk.LEFT, padx=8)
 
-        rf = tk.Frame(hdr, bg=BART_BLUE)
+        rf = tk.Frame(hdr, bg=SURFACE)
         rf.pack(side=tk.RIGHT, padx=20)
-        ModernButton(rf, text="Logout", font=(F, 10, 'bold'),
-            bg=RED, fg='white', padx=14, pady=7, command=self.logout).pack(side=tk.RIGHT, padx=6)
-        ModernButton(rf, text="⚙ Profile", font=(F, 10),
-            bg=SURFACE2, fg=TEXT_DIM, padx=12, pady=7,
+        ModernButton(rf, text="Logout", font=(F, 10),
+            bg=SURFACE2, fg=RED, padx=14, pady=8, command=self.logout).pack(side=tk.RIGHT, padx=4)
+        ModernButton(rf, text="Profile", font=(F, 10),
+            bg=SURFACE2, fg=TEXT_DIM, padx=12, pady=8,
             command=self.edit_profile).pack(side=tk.RIGHT, padx=4)
-        self._win_maximized = False
-        def _toggle_win():
-            self._win_maximized = not self._win_maximized
-            self.root.state('zoomed' if self._win_maximized else 'normal')
-        ModernButton(rf, text="⛶", font=(F, 13),
-            bg=BART_BLUE, fg=TEXT_DIM, padx=8, pady=7,
-            command=_toggle_win).pack(side=tk.RIGHT, padx=2)
-        self.clock_label = tk.Label(rf, font=(F, 13, 'bold'), bg=BART_BLUE, fg="#ffe082")
+        self.clock_label = tk.Label(rf, font=(F, 11), bg=SURFACE, fg=TEXT_DIM)
         self.clock_label.pack(side=tk.RIGHT, padx=16)
         start_live_clock(self.root, self.clock_label)
 
@@ -680,6 +787,7 @@ class PassengerDashboard:
             self.trip_tree.heading(c, text=c)
             self.trip_tree.column(c, width=w, anchor=tk.CENTER)
         self.trip_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.trip_tree)
         sb.config(command=self.trip_tree.yview)
 
     def _build_trains_section(self, parent):
@@ -692,6 +800,7 @@ class PassengerDashboard:
             self.live_train_tree.heading(c, text=c)
             self.live_train_tree.column(c, width=w, anchor=tk.CENTER)
         self.live_train_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.live_train_tree)
         sb.config(command=self.live_train_tree.yview)
         ModernButton(parent, text="↻ Refresh", font=(F, 9),
             bg=ORANGE, fg='white', padx=10, pady=4,
@@ -1138,6 +1247,7 @@ class GuestDashboard:
             self.train_tree.heading(c, text=c)
             self.train_tree.column(c, width=120, anchor=tk.CENTER)
         self.train_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.train_tree)
         sb.config(command=self.train_tree.yview)
 
     def _build_stations(self, parent):
@@ -1148,6 +1258,7 @@ class GuestDashboard:
             self.station_tree.heading(c, text=c)
             self.station_tree.column(c, width=90, anchor=tk.CENTER)
         self.station_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.station_tree)
 
     def update_displays(self):
         self.update_trains()
@@ -1220,44 +1331,37 @@ class AdminDashboard:
         self.update_displays()
 
     def _build(self):
-        hdr = tk.Frame(self.root, bg=SURFACE2, height=72)
+        hdr = tk.Frame(self.root, bg=SURFACE, height=62)
         hdr.pack(fill=tk.X)
         hdr.pack_propagate(False)
-        tk.Frame(hdr, bg=ORANGE, height=4).pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Frame(hdr, bg=BORDER, height=1).pack(fill=tk.X, side=tk.BOTTOM)
 
-        lf = tk.Frame(hdr, bg=SURFACE2)
-        lf.pack(side=tk.LEFT, padx=24, pady=12)
-        tk.Label(lf, text="🔧 BART Admin Portal", font=(F, 20, 'bold'),
-                 bg=SURFACE2, fg=TEXT).pack(anchor=tk.W)
-        tk.Label(lf, text=f"Operator: {self.admin.name}  •  {getattr(self.admin, 'department', 'Operations')}",
-                 font=(F, 10), bg=SURFACE2, fg=TEXT_DIM).pack(anchor=tk.W)
+        lf = tk.Frame(hdr, bg=SURFACE)
+        lf.pack(side=tk.LEFT, padx=24)
+        tk.Label(lf, text="BART", font=(F, 18, 'bold'), bg=SURFACE, fg=ORANGE).pack(side=tk.LEFT)
+        tk.Label(lf, text="  Admin Portal", font=(F, 14), bg=SURFACE, fg=TEXT).pack(side=tk.LEFT)
+        tk.Label(lf, text=f"  —  {self.admin.name}",
+                 font=(F, 10), bg=SURFACE, fg=TEXT_DIM).pack(side=tk.LEFT)
 
-        rf = tk.Frame(hdr, bg=SURFACE2)
+        rf = tk.Frame(hdr, bg=SURFACE)
         rf.pack(side=tk.RIGHT, padx=20)
-        ModernButton(rf, text="Logout", font=(F, 10, 'bold'),
-            bg=RED, fg='white', padx=16, pady=8, command=self.logout).pack(side=tk.RIGHT, padx=6)
-        ModernButton(rf, text="↻ Refresh", font=(F, 10),
-            bg=SURFACE, fg=TEXT_DIM, padx=14, pady=8,
+        ModernButton(rf, text="Logout", font=(F, 10),
+            bg=SURFACE2, fg=RED, padx=14, pady=8, command=self.logout).pack(side=tk.RIGHT, padx=4)
+        ModernButton(rf, text="Refresh", font=(F, 10),
+            bg=SURFACE2, fg=TEXT_DIM, padx=14, pady=8,
             command=self.update_displays).pack(side=tk.RIGHT, padx=4)
-        self._win_max = False
-        def _toggle_win():
-            self._win_max = not self._win_max
-            self.root.state('zoomed' if self._win_max else 'normal')
-        ModernButton(rf, text="⛶", font=(F, 13),
-            bg=SURFACE2, fg=TEXT_DIM, padx=8, pady=8,
-            command=_toggle_win).pack(side=tk.RIGHT, padx=2)
 
         body = tk.Frame(self.root, bg=BG)
-        body.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
+        body.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
         self.notebook = ttk.Notebook(body, style='D.TNotebook')
         self.notebook.pack(fill=tk.BOTH, expand=True)
 
         for title, builder in [
-            ("📊  Dashboard", self._build_dashboard_tab),
-            ("🚉  Stations",  self._build_station_tab),
-            ("🚆  Trains",    self._build_train_tab),
-            ("⚠   Alerts",   self._build_alerts_tab),
+            ("Dashboard", self._build_dashboard_tab),
+            ("Stations",  self._build_station_tab),
+            ("Trains",    self._build_train_tab),
+            ("Alerts",    self._build_alerts_tab),
         ]:
             frame = tk.Frame(self.notebook, bg=BG)
             self.notebook.add(frame, text=title)
@@ -1276,32 +1380,35 @@ class AdminDashboard:
         # Service status banner
         in_svc = BARTSystem.is_service_hours()
         svc_col = GREEN if in_svc else PURPLE
-        svc_txt = "🟢  BART IN SERVICE  (5:00 AM – 12:30 AM)" if in_svc \
-            else "🌙  NIGHT SUSPENSION  (12:30 AM – 5:00 AM)  — Trains halted"
-        self.service_banner = tk.Label(wrap, text=svc_txt, font=(F, 10, 'bold'),
-            bg=svc_col, fg='white', padx=16, pady=8, anchor=tk.W)
-        self.service_banner.pack(fill=tk.X, pady=(0, 16))
+        svc_txt = "  In Service  (5:00 AM – 12:30 AM)" if in_svc \
+            else "  Night Suspension  (12:30 AM – 5:00 AM)"
+        self.service_banner = tk.Frame(wrap, bg=SURFACE2)
+        self.service_banner.pack(fill=tk.X, pady=(0, 14))
+        tk.Frame(self.service_banner, bg=svc_col, width=4).pack(side=tk.LEFT, fill=tk.Y)
+        self._svc_label = tk.Label(self.service_banner, text=svc_txt,
+            font=(F, 10), bg=SURFACE2, fg=svc_col, padx=14, pady=8, anchor=tk.W)
+        self._svc_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        tk.Label(wrap, text="System Overview", font=(F, 18, 'bold'),
-                 bg=BG, fg=TEXT).pack(anchor=tk.W, pady=(0, 14))
+        tk.Label(wrap, text="System Overview", font=(F, 16, 'bold'),
+                 bg=BG, fg=TEXT).pack(anchor=tk.W, pady=(0, 12))
 
         row = tk.Frame(wrap, bg=BG)
         row.pack(fill=tk.X)
         for label, key, color in cfg:
-            c = tk.Frame(row, bg=SURFACE)
-            c.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-            tk.Frame(c, bg=color, height=5).pack(fill=tk.X)
-            inner = tk.Frame(c, bg=SURFACE, padx=20, pady=16)
+            c = tk.Frame(row, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
+            c.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+            tk.Frame(c, bg=color, height=2).pack(fill=tk.X)
+            inner = tk.Frame(c, bg=SURFACE, padx=18, pady=14)
             inner.pack(fill=tk.BOTH, expand=True)
-            tk.Label(inner, text=label, font=(F, 9, 'bold'),
+            tk.Label(inner, text=label, font=(F, 8, 'bold'),
                      bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W)
-            vl = tk.Label(inner, text="0", font=(F, 28, 'bold'), bg=SURFACE, fg=color)
-            vl.pack(anchor=tk.W, pady=(6, 0))
+            vl = tk.Label(inner, text="0", font=(F, 26, 'bold'), bg=SURFACE, fg=color)
+            vl.pack(anchor=tk.W, pady=(4, 0))
             self.stats_labels[key] = vl
 
-        ModernButton(wrap, text="📊  Generate Ridership Report", font=(F, 11, 'bold'),
-            bg=BLUE, fg='white', padx=20, pady=12,
-            command=self.generate_report).pack(anchor=tk.W, pady=16)
+        ModernButton(wrap, text="Generate Report", font=(F, 10),
+            bg=SURFACE2, fg=TEXT, padx=18, pady=10,
+            command=self.generate_report).pack(anchor=tk.W, pady=14)
 
     def _build_station_tab(self, parent):
         _, b = card(parent, "Station Management", "🚉", TEAL,
@@ -1315,6 +1422,7 @@ class AdminDashboard:
             self.station_tree.heading(c, text=c)
             self.station_tree.column(c, width=180, anchor=tk.CENTER)
         self.station_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.station_tree)
         sb.config(command=self.station_tree.yview)
         bf = tk.Frame(b, bg=SURFACE)
         bf.pack(fill=tk.X, pady=(10, 0))
@@ -1335,6 +1443,7 @@ class AdminDashboard:
             self.train_tree.heading(c, text=c)
             self.train_tree.column(c, width=w, anchor=tk.CENTER)
         self.train_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.train_tree)
         sb.config(command=self.train_tree.yview)
         bf = tk.Frame(b, bg=SURFACE)
         bf.pack(fill=tk.X, pady=(10, 0))
@@ -1356,6 +1465,7 @@ class AdminDashboard:
             self.alert_tree.heading(c, text=c)
             self.alert_tree.column(c, width=w, anchor=tk.CENTER)
         self.alert_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.alert_tree)
         sb.config(command=self.alert_tree.yview)
         bf = tk.Frame(b, bg=SURFACE)
         bf.pack(fill=tk.X, pady=(10, 0))
@@ -1380,9 +1490,13 @@ class AdminDashboard:
         try:
             in_svc = BARTSystem.is_service_hours()
             svc_col = GREEN if in_svc else PURPLE
-            svc_txt = "🟢  BART IN SERVICE  (5:00 AM – 12:30 AM)" if in_svc \
-                else "🌙  NIGHT SUSPENSION  (12:30 AM – 5:00 AM)  — Trains halted"
-            self.service_banner.config(text=svc_txt, bg=svc_col)
+            svc_txt = "  In Service  (5:00 AM – 12:30 AM)" if in_svc \
+                else "  Night Suspension  (12:30 AM – 5:00 AM)"
+            self._svc_label.config(text=svc_txt, fg=svc_col)
+            for child in self.service_banner.winfo_children():
+                if isinstance(child, tk.Frame):
+                    child.config(bg=svc_col)
+                    break
         except Exception:
             pass
 
@@ -1685,47 +1799,43 @@ class SuperAdminDashboard:
         self.update_displays()
 
     def _build(self):
-        hdr = tk.Frame(self.root, bg=SURFACE2, height=72)
+        hdr = tk.Frame(self.root, bg=SURFACE, height=62)
         hdr.pack(fill=tk.X)
         hdr.pack_propagate(False)
-        tk.Frame(hdr, bg=PURPLE, height=4).pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Frame(hdr, bg=BORDER, height=1).pack(fill=tk.X, side=tk.BOTTOM)
 
-        lf = tk.Frame(hdr, bg=SURFACE2)
-        lf.pack(side=tk.LEFT, padx=24, pady=12)
-        tk.Label(lf, text="🛡 BART Super Admin Control Panel",
-                 font=(F, 20, 'bold'), bg=SURFACE2, fg=TEXT).pack(anchor=tk.W)
-        tk.Label(lf, text=f"Full System Access  •  {self.admin.name}",
-                 font=(F, 10), bg=SURFACE2, fg=TEXT_DIM).pack(anchor=tk.W)
+        lf = tk.Frame(hdr, bg=SURFACE)
+        lf.pack(side=tk.LEFT, padx=24)
+        tk.Label(lf, text="BART", font=(F, 18, 'bold'), bg=SURFACE, fg=PURPLE).pack(side=tk.LEFT)
+        tk.Label(lf, text="  Super Admin", font=(F, 14), bg=SURFACE, fg=TEXT).pack(side=tk.LEFT)
+        tk.Label(lf, text=f"  —  {self.admin.name}",
+                 font=(F, 10), bg=SURFACE, fg=TEXT_DIM).pack(side=tk.LEFT)
 
-        sa_rf = tk.Frame(hdr, bg=SURFACE2)
+        sa_rf = tk.Frame(hdr, bg=SURFACE)
         sa_rf.pack(side=tk.RIGHT, padx=20)
-        ModernButton(sa_rf, text="Logout", font=(F, 10, 'bold'),
-            bg=RED, fg='white', padx=16, pady=8,
-            command=self.logout).pack(side=tk.RIGHT, padx=6)
-        ModernButton(sa_rf, text="↻ Refresh", font=(F, 10),
-            bg=SURFACE, fg=TEXT_DIM, padx=14, pady=8,
+        ModernButton(sa_rf, text="Logout", font=(F, 10),
+            bg=SURFACE2, fg=RED, padx=14, pady=8,
+            command=self.logout).pack(side=tk.RIGHT, padx=4)
+        ModernButton(sa_rf, text="Refresh", font=(F, 10),
+            bg=SURFACE2, fg=TEXT_DIM, padx=14, pady=8,
             command=self.update_displays).pack(side=tk.RIGHT, padx=4)
-        self._win_max = False
-        def _sa_toggle_win():
-            self._win_max = not self._win_max
-            self.root.state('zoomed' if self._win_max else 'normal')
-        ModernButton(sa_rf, text="⛶", font=(F, 13),
-            bg=SURFACE2, fg=TEXT_DIM, padx=8, pady=8,
-            command=_sa_toggle_win).pack(side=tk.RIGHT, padx=2)
 
         body = tk.Frame(self.root, bg=BG)
-        body.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
+        body.pack(fill=tk.BOTH, expand=True)
 
         self.notebook = ttk.Notebook(body, style='D.TNotebook')
         self.notebook.pack(fill=tk.BOTH, expand=True)
 
         for title, builder in [
-            ("📊  Dashboard",  self._build_dashboard_tab),
-            ("🚉  Stations",   self._build_station_tab),
-            ("🚆  Trains",     self._build_train_tab),
-            ("💰  Fare Rules", self._build_fare_tab),
-            ("👥  Admins",     self._build_admin_tab),
-            ("⚠   Alerts",    self._build_alerts_tab),
+            ("Dashboard",  self._build_dashboard_tab),
+            ("Stations",   self._build_station_tab),
+            ("Trains",     self._build_train_tab),
+            ("Fare Rules", self._build_fare_tab),
+            ("Admins",     self._build_admin_tab),
+            ("Alerts",     self._build_alerts_tab),
+            ("Reports",    self._build_reports_tab),
+            ("Schedules",  self._build_schedules_tab),
+            ("Users",      self._build_users_tab),
         ]:
             frame = tk.Frame(self.notebook, bg=BG)
             self.notebook.add(frame, text=title)
@@ -1746,117 +1856,92 @@ class SuperAdminDashboard:
         # Service status banner
         in_svc = BARTSystem.is_service_hours()
         svc_col = GREEN if in_svc else PURPLE
-        svc_txt = "🟢  BART IN SERVICE  (5:00 AM – 12:30 AM)" if in_svc \
-            else "🌙  NIGHT SUSPENSION  (12:30 AM – 5:00 AM)  — Trains halted"
-        self.service_banner = tk.Label(wrap, text=svc_txt, font=(F, 10, 'bold'),
-            bg=svc_col, fg='white', padx=16, pady=8, anchor=tk.W)
-        self.service_banner.pack(fill=tk.X, pady=(0, 12))
+        svc_txt = "  In Service  (5:00 AM – 12:30 AM)" if in_svc \
+            else "  Night Suspension  (12:30 AM – 5:00 AM)"
+        self.service_banner = tk.Frame(wrap, bg=SURFACE2)
+        self.service_banner.pack(fill=tk.X, pady=(0, 14))
+        tk.Frame(self.service_banner, bg=svc_col, width=4).pack(side=tk.LEFT, fill=tk.Y)
+        self._svc_label = tk.Label(self.service_banner, text=svc_txt,
+            font=(F, 10), bg=SURFACE2, fg=svc_col, padx=14, pady=8, anchor=tk.W)
+        self._svc_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         left = tk.Frame(wrap, bg=BG)
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        tk.Label(left, text="System Statistics", font=(F, 18, 'bold'),
-                 bg=BG, fg=TEXT).pack(anchor=tk.W, pady=(0, 14))
+        tk.Label(left, text="System Statistics", font=(F, 16, 'bold'),
+                 bg=BG, fg=TEXT).pack(anchor=tk.W, pady=(0, 12))
 
         grid = tk.Frame(left, bg=BG)
         grid.pack(fill=tk.X)
         for i, (lbl, key, color) in enumerate(cfg):
-            c = tk.Frame(grid, bg=SURFACE)
-            c.grid(row=i // 3, column=i % 3, padx=(0, 10), pady=(0, 10), sticky="nsew")
-            tk.Frame(c, bg=color, height=5).pack(fill=tk.X)
-            inner = tk.Frame(c, bg=SURFACE, padx=20, pady=16)
+            c = tk.Frame(grid, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
+            c.grid(row=i // 3, column=i % 3, padx=(0, 8), pady=(0, 8), sticky="nsew")
+            tk.Frame(c, bg=color, height=2).pack(fill=tk.X)
+            inner = tk.Frame(c, bg=SURFACE, padx=16, pady=14)
             inner.pack(fill=tk.BOTH, expand=True)
-            tk.Label(inner, text=lbl, font=(F, 9, 'bold'), bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W)
-            vl = tk.Label(inner, text="0", font=(F, 26, 'bold'), bg=SURFACE, fg=color)
-            vl.pack(anchor=tk.W, pady=(6, 0))
+            tk.Label(inner, text=lbl, font=(F, 8, 'bold'), bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W)
+            vl = tk.Label(inner, text="0", font=(F, 24, 'bold'), bg=SURFACE, fg=color)
+            vl.pack(anchor=tk.W, pady=(4, 0))
             self.stats_labels[key] = vl
 
-        ModernButton(left, text="📊  Full Ridership Report", font=(F, 11, 'bold'),
-            bg=BLUE, fg='white', padx=20, pady=12,
-            command=self.generate_report).pack(anchor=tk.W, pady=16)
+        ModernButton(left, text="Full Ridership Report", font=(F, 10),
+            bg=SURFACE2, fg=TEXT, padx=18, pady=10,
+            command=self.generate_report).pack(anchor=tk.W, pady=14)
 
-        right = tk.Frame(wrap, bg=SURFACE, width=280)
-        right.pack(side=tk.LEFT, fill=tk.Y, padx=(16, 0))
+        right = tk.Frame(wrap, bg=SURFACE, width=240)
+        right.pack(side=tk.LEFT, fill=tk.Y, padx=(14, 0))
         right.pack_propagate(False)
-        tk.Frame(right, bg=PURPLE, height=5).pack(fill=tk.X)
-        ri = tk.Frame(right, bg=SURFACE, padx=16, pady=16)
+        tk.Frame(right, bg=PURPLE, height=2).pack(fill=tk.X)
+        ri = tk.Frame(right, bg=SURFACE, padx=14, pady=14)
         ri.pack(fill=tk.BOTH, expand=True)
-        tk.Label(ri, text="Quick Actions", font=(F, 13, 'bold'),
-                 bg=SURFACE, fg=TEXT).pack(anchor=tk.W, pady=(0, 14))
+        tk.Label(ri, text="Quick Actions", font=(F, 11, 'bold'),
+                 bg=SURFACE, fg=TEXT).pack(anchor=tk.W, pady=(0, 12))
         for txt, cmd, col in [
-            ("🚫  Emergency Close All", self.emergency_close_all, RED),
-            ("✅  Open All Stations",   self.open_all_stations,    GREEN),
-            ("⚠  Create System Alert", self.create_alert,          YELLOW),
-            ("↻  Refresh All Data",    self.update_displays,       BLUE),
+            ("Emergency Close All", self.emergency_close_all, RED),
+            ("Open All Stations",   self.open_all_stations,    GREEN),
+            ("Create System Alert", self.create_alert,          SURFACE2),
+            ("Refresh All Data",    self.update_displays,       SURFACE2),
         ]:
-            ModernButton(ri, text=txt, bg=col,
-                fg='white' if col != YELLOW else '#111',
-                font=(F, 10), padx=10, pady=10,
-                command=cmd).pack(fill=tk.X, pady=(0, 8))
+            ModernButton(ri, text=txt, bg=col, fg=TEXT,
+                font=(F, 10), padx=10, pady=9,
+                command=cmd).pack(fill=tk.X, pady=(0, 6))
 
     def _build_station_tab(self, parent):
         _, b = card(parent, "Station Management", "🚉", TEAL,
                     fill=tk.BOTH, expand=True, padx=16, pady=16)
 
         # ── Station list ─────────────────────────────────────
-        cols = ("ID", "Name", "Zone", "Status")
+        cols = ("ID", "Name", "Zone", "Status", "Alerts")
         sb = ttk.Scrollbar(b, style='D.Vertical.TScrollbar')
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.station_tree = ttk.Treeview(b, columns=cols, show='headings',
                                           yscrollcommand=sb.set, height=13, style='D.Treeview')
-        for c, w in [("ID", 80), ("Name", 210), ("Zone", 80), ("Status", 110)]:
+        for c, w in [("ID", 80), ("Name", 210), ("Zone", 80), ("Status", 110), ("Alerts", 70)]:
             self.station_tree.heading(c, text=c)
             self.station_tree.column(c, width=w, anchor=tk.CENTER)
         self.station_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.station_tree)
         sb.config(command=self.station_tree.yview)
 
         # ── Action panel ─────────────────────────────────────
         action_panel = tk.Frame(b, bg=SURFACE2, padx=14, pady=12)
         action_panel.pack(fill=tk.X, pady=(10, 0))
 
-        tk.Label(action_panel, text="STATION CONTROL  —  Select a station above, then choose an action",
-                 font=(F, 8, 'bold'), bg=SURFACE2, fg=TEXT_DIM).pack(anchor=tk.W, pady=(0, 10))
+        tk.Label(action_panel, text="Select a station above, then choose an action",
+                 font=(F, 9), bg=SURFACE2, fg=TEXT_DIM).pack(anchor=tk.W, pady=(0, 10))
 
         btn_row = tk.Frame(action_panel, bg=SURFACE2)
         btn_row.pack(fill=tk.X)
 
-        # Close station — red safety button
-        close_col = tk.Frame(btn_row, bg='#3d0000', padx=14, pady=10)
-        close_col.pack(side=tk.LEFT, padx=(0, 10))
-        tk.Label(close_col, text="🔒  CLOSE STATION", font=(F, 10, 'bold'),
-                 bg='#3d0000', fg=RED).pack(anchor=tk.W)
-        tk.Label(close_col, text="Locks all gates  •  Broadcasts passenger alert",
-                 font=(F, 8), bg='#3d0000', fg='#ff8888').pack(anchor=tk.W, pady=(2, 8))
-        ModernButton(close_col, text="Close Selected Station",
-            font=(F, 10, 'bold'), bg=RED, fg='white', padx=14, pady=9,
-            command=self.close_selected_station).pack(anchor=tk.W)
-
-        # Divider
-        tk.Frame(btn_row, bg=BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
-
-        # Open station — green clearance button
-        open_col = tk.Frame(btn_row, bg='#003d10', padx=14, pady=10)
-        open_col.pack(side=tk.LEFT, padx=(0, 10))
-        tk.Label(open_col, text="✅  OPEN STATION", font=(F, 10, 'bold'),
-                 bg='#003d10', fg=GREEN).pack(anchor=tk.W)
-        tk.Label(open_col, text="Safety checklist required  •  Notifies passengers",
-                 font=(F, 8), bg='#003d10', fg='#88ffaa').pack(anchor=tk.W, pady=(2, 8))
-        ModernButton(open_col, text="Open Selected Station",
-            font=(F, 10, 'bold'), bg=GREEN, fg='white', padx=14, pady=9,
-            command=self.open_selected_station).pack(anchor=tk.W)
-
-        # Divider
-        tk.Frame(btn_row, bg=BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
-
-        # Add station
-        add_col = tk.Frame(btn_row, bg=SURFACE2, padx=14, pady=10)
-        add_col.pack(side=tk.LEFT)
-        tk.Label(add_col, text="➕  ADD STATION", font=(F, 10, 'bold'),
-                 bg=SURFACE2, fg=CYAN).pack(anchor=tk.W)
-        tk.Label(add_col, text="Register a new BART station",
-                 font=(F, 8), bg=SURFACE2, fg=TEXT_DIM).pack(anchor=tk.W, pady=(2, 8))
-        ModernButton(add_col, text="Add New Station",
-            font=(F, 10, 'bold'), bg=BLUE, fg='white', padx=14, pady=9,
-            command=self.add_station_dialog).pack(anchor=tk.W)
+        ModernButton(btn_row, text="Close Selected", bg=RED, fg='white',
+            font=(F, 10), padx=16, pady=9,
+            command=self.close_selected_station).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(btn_row, text="Open Selected", bg=GREEN, fg='white',
+            font=(F, 10), padx=16, pady=9,
+            command=self.open_selected_station).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Frame(btn_row, bg=BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
+        ModernButton(btn_row, text="Add New Station", bg=BLUE, fg='white',
+            font=(F, 10), padx=16, pady=9,
+            command=self.add_station_dialog).pack(side=tk.LEFT)
 
     def _build_train_tab(self, parent):
         _, b = card(parent, "Train Management", "🚆", ORANGE,
@@ -1871,6 +1956,7 @@ class SuperAdminDashboard:
             self.train_tree.heading(c, text=c)
             self.train_tree.column(c, width=w, anchor=tk.CENTER)
         self.train_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.train_tree)
         sb.config(command=self.train_tree.yview)
         bf = tk.Frame(b, bg=SURFACE)
         bf.pack(fill=tk.X, pady=(10, 0))
@@ -1927,10 +2013,16 @@ class SuperAdminDashboard:
             self.admin_tree.heading(c, text=c)
             self.admin_tree.column(c, width=w, anchor=tk.CENTER)
         self.admin_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.admin_tree)
         sb.config(command=self.admin_tree.yview)
-        ModernButton(b, text="+ Create Admin Account", bg=GREEN, fg='white',
+        bf_admin = tk.Frame(b, bg=SURFACE)
+        bf_admin.pack(anchor=tk.W, pady=(10, 0))
+        ModernButton(bf_admin, text="+ Create Admin Account", bg=GREEN, fg='white',
             font=(F, 11, 'bold'), padx=16, pady=10,
-            command=self.create_admin_dialog).pack(anchor=tk.W, pady=(10, 0))
+            command=self.create_admin_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_admin, text="Remove Selected", bg=RED, fg='white',
+            font=(F, 11, 'bold'), padx=16, pady=10,
+            command=self.remove_admin_dialog).pack(side=tk.LEFT)
 
     def _build_alerts_tab(self, parent):
         _, b = card(parent, "Service Alerts", "⚠", RED,
@@ -1944,6 +2036,7 @@ class SuperAdminDashboard:
             self.alert_tree.heading(c, text=c)
             self.alert_tree.column(c, width=w, anchor=tk.CENTER)
         self.alert_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.alert_tree)
         sb.config(command=self.alert_tree.yview)
         bf = tk.Frame(b, bg=SURFACE)
         bf.pack(fill=tk.X, pady=(10, 0))
@@ -1960,6 +2053,9 @@ class SuperAdminDashboard:
         self.update_trains()
         self.update_admins()
         self.update_alerts()
+        self.update_reports()
+        self.update_schedules()
+        self.update_users()
 
     def update_stats(self):
         s = self.bart_system.get_system_stats()
@@ -1969,9 +2065,13 @@ class SuperAdminDashboard:
         try:
             in_svc = BARTSystem.is_service_hours()
             svc_col = GREEN if in_svc else PURPLE
-            svc_txt = "🟢  BART IN SERVICE  (5:00 AM – 12:30 AM)" if in_svc \
-                else "🌙  NIGHT SUSPENSION  (12:30 AM – 5:00 AM)  — Trains halted"
-            self.service_banner.config(text=svc_txt, bg=svc_col)
+            svc_txt = "  In Service  (5:00 AM – 12:30 AM)" if in_svc \
+                else "  Night Suspension  (12:30 AM – 5:00 AM)"
+            self._svc_label.config(text=svc_txt, fg=svc_col)
+            for child in self.service_banner.winfo_children():
+                if isinstance(child, tk.Frame):
+                    child.config(bg=svc_col)
+                    break
         except Exception:
             pass
 
@@ -1979,8 +2079,10 @@ class SuperAdminDashboard:
         for i in self.station_tree.get_children(): self.station_tree.delete(i)
         for s in self.bart_system.get_all_stations():
             tag = "closed" if not s.is_operational() else "open"
+            alert_cnt = sum(1 for a in s.alerts if a.is_active)
             self.station_tree.insert("", tk.END,
-                values=(s.station_id, s.name, s.zone, s.status.value), tags=(s.station_id, tag))
+                values=(s.station_id, s.name, s.zone, s.status.value, alert_cnt),
+                tags=(s.station_id, tag))
         self.station_tree.tag_configure("closed", foreground=RED)
         self.station_tree.tag_configure("open", foreground=GREEN)
 
@@ -2596,6 +2698,402 @@ class SuperAdminDashboard:
                 report += f"  {i}. {stn}: {cnt} trips\n"
             messagebox.showinfo("Full Report", report)
         except Exception as e: messagebox.showerror("Error", str(e))
+
+    # ── Reports Tab ────────────────────────────────────────────
+    def _build_reports_tab(self, parent):
+        _, b = card(parent, "Ridership & Revenue Reports", "📋", BLUE,
+                    fill=tk.BOTH, expand=True, padx=16, pady=16)
+
+        filter_frame = tk.Frame(b, bg=SURFACE2, padx=12, pady=10)
+        filter_frame.pack(fill=tk.X, pady=(0, 12))
+        tk.Label(filter_frame, text="DATE RANGE:", font=(F, 9, 'bold'),
+                 bg=SURFACE2, fg=TEXT_DIM).pack(side=tk.LEFT, padx=(0, 10))
+        self._report_period = tk.StringVar(value="all")
+        for label, val in [("Today", "today"), ("7 Days", "7d"), ("30 Days", "30d"), ("All Time", "all")]:
+            tk.Radiobutton(filter_frame, text=label, variable=self._report_period, value=val,
+                           font=(F, 10, 'bold'), bg=SURFACE2, fg=TEXT_DIM,
+                           selectcolor=BLUE, activebackground=SURFACE2,
+                           indicatoron=0, padx=12, pady=6, relief=tk.FLAT,
+                           bd=1, highlightthickness=0,
+                           command=self.update_reports).pack(side=tk.LEFT, padx=(0, 6))
+
+        stats_row = tk.Frame(b, bg=BG)
+        stats_row.pack(fill=tk.X, pady=(0, 12))
+        self._rpt_labels = {}
+        for lbl, key, col in [("Total Trips", "total_trips", BLUE),
+                                ("Closed Trips", "closed_trips", GREEN),
+                                ("Active Trips", "active_trips", RED),
+                                ("Revenue", "total_revenue", YELLOW),
+                                ("Avg Fare", "average_fare", TEAL)]:
+            c = tk.Frame(stats_row, bg=SURFACE)
+            c.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+            tk.Frame(c, bg=col, height=4).pack(fill=tk.X)
+            inn = tk.Frame(c, bg=SURFACE, padx=12, pady=10)
+            inn.pack(fill=tk.BOTH, expand=True)
+            tk.Label(inn, text=lbl, font=(F, 8, 'bold'), bg=SURFACE, fg=TEXT_DIM).pack(anchor=tk.W)
+            vl = tk.Label(inn, text="0", font=(F, 20, 'bold'), bg=SURFACE, fg=col)
+            vl.pack(anchor=tk.W)
+            self._rpt_labels[key] = vl
+
+        tk.Label(b, text="Busiest Stations", font=(F, 12, 'bold'),
+                 bg=SURFACE, fg=TEXT).pack(anchor=tk.W, pady=(4, 6))
+        rpt_sb = ttk.Scrollbar(b, style='D.Vertical.TScrollbar')
+        rpt_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.report_tree = ttk.Treeview(b, columns=("Rank", "Station", "Trips"),
+                                         show='headings', yscrollcommand=rpt_sb.set,
+                                         height=8, style='D.Treeview')
+        for c, w in [("Rank", 60), ("Station", 300), ("Trips", 100)]:
+            self.report_tree.heading(c, text=c)
+            self.report_tree.column(c, width=w, anchor=tk.CENTER)
+        self.report_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.report_tree)
+        rpt_sb.config(command=self.report_tree.yview)
+
+        ModernButton(b, text="📊  Generate Full Report", bg=BLUE, fg='white',
+            font=(F, 11, 'bold'), padx=16, pady=10,
+            command=self.generate_report).pack(anchor=tk.W, pady=(10, 0))
+
+    def update_reports(self):
+        try:
+            from datetime import timedelta
+            period = getattr(self, '_report_period', None)
+            period_val = period.get() if period else "all"
+            now = datetime.now()
+            start = None
+            if period_val == "today":
+                start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif period_val == "7d":
+                start = now - timedelta(days=7)
+            elif period_val == "30d":
+                start = now - timedelta(days=30)
+
+            s = self.bart_system.admin_get_ridership_stats(self.admin, start_date=start)
+            for key, lbl in self._rpt_labels.items():
+                val = s.get(key, 0)
+                lbl.config(text=f"${val:.2f}" if key in ("total_revenue", "average_fare") else str(val))
+
+            for i in self.report_tree.get_children(): self.report_tree.delete(i)
+            for rank, (stn, cnt) in enumerate(s.get("busiest_stations", []), 1):
+                self.report_tree.insert("", tk.END, values=(rank, stn, cnt))
+        except Exception:
+            pass
+
+    # ── Schedules Tab ──────────────────────────────────────────
+    def _build_schedules_tab(self, parent):
+        _, b = card(parent, "Live Train Schedules", "📅", TEAL,
+                    fill=tk.BOTH, expand=True, padx=16, pady=16)
+
+        sel_frame = tk.Frame(b, bg=SURFACE2, padx=12, pady=10)
+        sel_frame.pack(fill=tk.X, pady=(0, 12))
+        tk.Label(sel_frame, text="FILTER BY LINE:", font=(F, 9, 'bold'),
+                 bg=SURFACE2, fg=TEXT_DIM).pack(side=tk.LEFT, padx=(0, 10))
+        self._sched_line = tk.StringVar(value="All")
+        lines = ["All", "Red Line", "Blue Line", "Green Line", "Yellow Line"]
+        dark_combo(sel_frame, self._sched_line, lines, width=16).pack(side=tk.LEFT)
+        ModernButton(sel_frame, text="Filter", bg=TEAL, fg='white',
+            padx=12, pady=4, command=self.update_schedules).pack(side=tk.LEFT, padx=8)
+
+        cols = ("Train", "Line", "Status", "Current Station", "Next Station", "ETA", "Capacity")
+        sched_sb = ttk.Scrollbar(b, style='D.Vertical.TScrollbar')
+        sched_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.sched_tree = ttk.Treeview(b, columns=cols, show='headings',
+                                        yscrollcommand=sched_sb.set, height=14, style='D.Treeview')
+        for c, w in [("Train", 75), ("Line", 130), ("Status", 110),
+                      ("Current Station", 160), ("Next Station", 160), ("ETA", 70), ("Capacity", 80)]:
+            self.sched_tree.heading(c, text=c)
+            self.sched_tree.column(c, width=w, anchor=tk.CENTER)
+        self.sched_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.sched_tree)
+        sched_sb.config(command=self.sched_tree.yview)
+
+        bf_sched = tk.Frame(b, bg=SURFACE)
+        bf_sched.pack(fill=tk.X, pady=(10, 0))
+        ModernButton(bf_sched, text="↻ Refresh", bg=TEAL, fg='white', padx=14, pady=8,
+            command=self.update_schedules).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_sched, text="Update Train Location", bg=PURPLE, fg='white', padx=14, pady=8,
+            command=self._sched_update_location).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_sched, text="Set Running", bg=GREEN, fg='white', padx=14, pady=8,
+            command=lambda: self._sched_set_status(TrainStatus.RUNNING)).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_sched, text="Set Delayed", bg=YELLOW, fg='#111', padx=14, pady=8,
+            command=lambda: self._sched_set_status(TrainStatus.DELAYED)).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_sched, text="Out of Service", bg=RED, fg='white', padx=14, pady=8,
+            command=lambda: self._sched_set_status(TrainStatus.OUT_OF_SERVICE)).pack(side=tk.LEFT)
+
+    def update_schedules(self):
+        try:
+            for i in self.sched_tree.get_children(): self.sched_tree.delete(i)
+            line_filter = getattr(self, '_sched_line', None)
+            sel_line = line_filter.get() if line_filter else "All"
+            for t in self.bart_system.get_all_trains():
+                if sel_line != "All" and t.line != sel_line:
+                    continue
+                cur = t.current_station.name if t.current_station else "In Transit"
+                nxt = t.next_station.name if t.next_station else "—"
+                eta = f"{t.eta_minutes}m" if t.eta_minutes else "—"
+                self.sched_tree.insert("", tk.END,
+                    values=(t.train_id, t.line, t.status.value, cur, nxt, eta, t.capacity),
+                    tags=(t.train_id,))
+        except Exception:
+            pass
+
+    def _sched_update_location(self):
+        sel = self.sched_tree.selection()
+        if not sel:
+            messagebox.showerror("Error", "Select a train first")
+            return
+        tid = self.sched_tree.item(sel[0])["values"][0]
+        train = self.bart_system.trains.get(str(tid))
+        if not train:
+            return
+        self._open_location_dialog(train)
+
+    def _sched_set_status(self, status: TrainStatus):
+        sel = self.sched_tree.selection()
+        if not sel:
+            messagebox.showerror("Error", "Select a train first")
+            return
+        tid = self.sched_tree.item(sel[0])["values"][0]
+        t = self.bart_system.trains.get(str(tid))
+        if not t:
+            return
+        if status == TrainStatus.DELAYED:
+            self._train_delay_dialog(t)
+        else:
+            col = {TrainStatus.RUNNING: GREEN, TrainStatus.OUT_OF_SERVICE: RED}.get(status, ORANGE)
+            try:
+                self.bart_system.admin_update_train_status(self.admin, t, status)
+                Toast(self.root, f"Train {t.train_id} → {status.value}", color=col)
+                self.update_displays()
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def _open_location_dialog(self, train):
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"Update Location — {train.train_id}")
+        dlg.geometry("420x340")
+        dlg.configure(bg=SURFACE)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        tk.Frame(dlg, bg=PURPLE, height=5).pack(fill=tk.X)
+        tk.Label(dlg, text=f"📍 Update Train {train.train_id} Location",
+                 font=(F, 16, 'bold'), bg=SURFACE, fg=TEXT).pack(pady=18)
+        tk.Label(dlg, text=f"Line: {train.line}", font=(F, 11), bg=SURFACE, fg=TEXT_DIM).pack()
+
+        stations = list(self.bart_system.stations.values())
+        snames = ["None (In Transit)"] + [s.name for s in stations]
+        wrap = tk.Frame(dlg, bg=SURFACE, padx=30)
+        wrap.pack(fill=tk.X, pady=14)
+
+        cur_var = tk.StringVar()
+        nxt_var = tk.StringVar()
+        for label_text, var, attr in [("Current Station", cur_var, "current_station"),
+                                       ("Next Station",    nxt_var, "next_station")]:
+            row = tk.Frame(wrap, bg=SURFACE)
+            row.pack(fill=tk.X, pady=(0, 10))
+            tk.Label(row, text=label_text, font=(F, 10, 'bold'),
+                     bg=SURFACE, fg=TEXT_DIM, width=16, anchor=tk.W).pack(side=tk.LEFT)
+            cb = dark_combo(row, var, snames, width=22)
+            cb.pack(side=tk.LEFT)
+            curr = getattr(train, attr, None)
+            cb.set(curr.name if curr else "None (In Transit)")
+
+        row_eta = tk.Frame(wrap, bg=SURFACE)
+        row_eta.pack(fill=tk.X, pady=(0, 16))
+        tk.Label(row_eta, text="ETA (minutes)", font=(F, 10, 'bold'),
+                 bg=SURFACE, fg=TEXT_DIM, width=16, anchor=tk.W).pack(side=tk.LEFT)
+        eta_e = tk.Entry(row_eta, font=(F, 11), width=8, bg=SURFACE2, fg=TEXT,
+                          relief=tk.FLAT, bd=0, insertbackground=CYAN)
+        eta_e.insert(0, str(train.eta_minutes or 0))
+        eta_e.pack(side=tk.LEFT, ipady=6, padx=8)
+
+        def save():
+            cur_st = next((s for s in stations if s.name == cur_var.get()), None)
+            nxt_st = next((s for s in stations if s.name == nxt_var.get()), None)
+            try: eta = int(eta_e.get()) if eta_e.get() else None
+            except ValueError: eta = None
+            train.update_location(cur_st, nxt_st, eta)
+            self.update_displays()
+            dlg.destroy()
+            Toast(self.root, f"Train {train.train_id} location updated", color=PURPLE)
+
+        bf = tk.Frame(wrap, bg=SURFACE)
+        bf.pack(fill=tk.X)
+        ModernButton(bf, text="Save", bg=GREEN, fg='white', padx=20, pady=8,
+            command=save).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf, text="Cancel", bg=RED, fg='white', padx=20, pady=8,
+            command=dlg.destroy).pack(side=tk.LEFT)
+
+    # ── Users Tab ──────────────────────────────────────────────
+    def _build_users_tab(self, parent):
+        _, b = card(parent, "User & Passenger Management", "👤", CYAN,
+                    fill=tk.BOTH, expand=True, padx=16, pady=16)
+
+        search_frame = tk.Frame(b, bg=SURFACE2, padx=12, pady=10)
+        search_frame.pack(fill=tk.X, pady=(0, 12))
+        tk.Label(search_frame, text="SEARCH:", font=(F, 9, 'bold'),
+                 bg=SURFACE2, fg=TEXT_DIM).pack(side=tk.LEFT, padx=(0, 8))
+        self._user_search = tk.Entry(search_frame, font=(F, 11), width=28,
+            bg=SURFACE, fg=TEXT, relief=tk.FLAT, insertbackground=CYAN, bd=0)
+        self._user_search.pack(side=tk.LEFT, padx=(0, 8), ipady=6)
+        ModernButton(search_frame, text="Search", bg=CYAN, fg='#111', padx=12, pady=4,
+            command=self.update_users).pack(side=tk.LEFT, padx=(0, 12))
+        tk.Label(search_frame, text="ROLE:", font=(F, 9, 'bold'),
+                 bg=SURFACE2, fg=TEXT_DIM).pack(side=tk.LEFT, padx=(0, 6))
+        self._user_role_filter = tk.StringVar(value="All")
+        dark_combo(search_frame, self._user_role_filter,
+                   ["All", "Passenger", "Admin", "Super Admin"], width=14).pack(side=tk.LEFT)
+
+        cols = ("ID", "Username", "Name", "Role", "Email", "Card ID", "Balance", "Card Status")
+        usr_sb = ttk.Scrollbar(b, style='D.Vertical.TScrollbar')
+        usr_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.users_tree = ttk.Treeview(b, columns=cols, show='headings',
+                                        yscrollcommand=usr_sb.set, height=14, style='D.Treeview')
+        for c, w in [("ID", 70), ("Username", 100), ("Name", 140), ("Role", 90),
+                      ("Email", 180), ("Card ID", 80), ("Balance", 80), ("Card Status", 90)]:
+            self.users_tree.heading(c, text=c)
+            self.users_tree.column(c, width=w, anchor=tk.CENTER)
+        self.users_tree.pack(fill=tk.BOTH, expand=True)
+        bind_scroll(self.users_tree)
+        usr_sb.config(command=self.users_tree.yview)
+
+        bf_usr = tk.Frame(b, bg=SURFACE)
+        bf_usr.pack(fill=tk.X, pady=(10, 0))
+        ModernButton(bf_usr, text="↻ Refresh", bg=BLUE, fg='white', padx=14, pady=8,
+            command=self.update_users).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_usr, text="Freeze Card", bg=RED, fg='white', padx=14, pady=8,
+            command=self._freeze_user_card).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_usr, text="Unfreeze Card", bg=GREEN, fg='white', padx=14, pady=8,
+            command=self._unfreeze_user_card).pack(side=tk.LEFT, padx=(0, 8))
+        ModernButton(bf_usr, text="View Trips", bg=PURPLE, fg='white', padx=14, pady=8,
+            command=self._view_user_trips).pack(side=tk.LEFT)
+
+    def update_users(self):
+        try:
+            for i in self.users_tree.get_children(): self.users_tree.delete(i)
+            query = getattr(self, '_user_search', None)
+            q = query.get().strip().lower() if query else ""
+            role_f = getattr(self, '_user_role_filter', None)
+            role_sel = role_f.get() if role_f else "All"
+            for u in self.bart_system.auth_service.users.values():
+                if isinstance(u, SuperAdmin): role = "Super Admin"
+                elif isinstance(u, Admin): role = "Admin"
+                else: role = "Passenger"
+                if role_sel != "All" and role != role_sel:
+                    continue
+                if q and q not in u.username.lower() and q not in u.name.lower():
+                    continue
+                if isinstance(u, Passenger) and u.card:
+                    card_id = u.card.card_id
+                    balance = f"${u.card.balance:.2f}"
+                    card_status = u.card.status.value
+                else:
+                    card_id = "N/A"
+                    balance = "—"
+                    card_status = "—"
+                self.users_tree.insert("", tk.END,
+                    values=(u.user_id, u.username, u.name, role, u.email,
+                            card_id, balance, card_status),
+                    tags=(u.user_id,))
+        except Exception:
+            pass
+
+    def _get_selected_user(self):
+        sel = self.users_tree.selection()
+        if not sel:
+            messagebox.showerror("Error", "Select a user first")
+            return None
+        uid = self.users_tree.item(sel[0])["tags"][0]
+        return self.bart_system.auth_service.users.get(uid)
+
+    def _freeze_user_card(self):
+        u = self._get_selected_user()
+        if not u or not isinstance(u, Passenger):
+            messagebox.showerror("Error", "Select a passenger with a card")
+            return
+        if not u.card:
+            messagebox.showerror("Error", f"{u.name} has no card")
+            return
+        if not u.card.is_active():
+            messagebox.showinfo("Info", "Card is already frozen")
+            return
+        u.card.freeze()
+        Toast(self.root, f"Card {u.card.card_id} frozen for {u.name}", color=RED)
+        self.update_users()
+
+    def _unfreeze_user_card(self):
+        u = self._get_selected_user()
+        if not u or not isinstance(u, Passenger):
+            messagebox.showerror("Error", "Select a passenger with a card")
+            return
+        if not u.card:
+            messagebox.showerror("Error", f"{u.name} has no card")
+            return
+        if u.card.is_active():
+            messagebox.showinfo("Info", "Card is already active")
+            return
+        u.card.unfreeze()
+        Toast(self.root, f"Card {u.card.card_id} unfrozen for {u.name}", color=GREEN)
+        self.update_users()
+
+    def _view_user_trips(self):
+        u = self._get_selected_user()
+        if not u:
+            return
+        if not isinstance(u, Passenger):
+            messagebox.showinfo("Info", f"{u.name} is {('an Admin' if isinstance(u, Admin) else 'a Super Admin')} — no trips")
+            return
+        trips = self.bart_system.get_passenger_trips(u)
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"Trip History — {u.name}")
+        dlg.geometry("700x460")
+        dlg.configure(bg=SURFACE)
+        dlg.transient(self.root)
+        tk.Frame(dlg, bg=PURPLE, height=5).pack(fill=tk.X)
+        tk.Label(dlg, text=f"Trip History: {u.name}", font=(F, 16, 'bold'),
+                 bg=SURFACE, fg=TEXT).pack(pady=(14, 4))
+        tk.Label(dlg, text=f"{len(trips)} trip(s) found", font=(F, 10),
+                 bg=SURFACE, fg=TEXT_DIM).pack(pady=(0, 10))
+        cols = ("Trip ID", "From", "To", "Date", "Fare", "Status")
+        sb = ttk.Scrollbar(dlg, style='D.Vertical.TScrollbar')
+        sb.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 8))
+        tree = ttk.Treeview(dlg, columns=cols, show='headings',
+                             yscrollcommand=sb.set, style='D.Treeview')
+        for c, w in [("Trip ID", 80), ("From", 140), ("To", 140),
+                      ("Date", 140), ("Fare", 80), ("Status", 80)]:
+            tree.heading(c, text=c)
+            tree.column(c, width=w, anchor=tk.CENTER)
+        for t in trips:
+            dest = t.exit_station.name if t.exit_station else "—"
+            fare = f"${t.fare:.2f}" if t.fare else "—"
+            tree.insert("", tk.END,
+                values=(t.trip_id, t.entry_station.name, dest,
+                        t.start_time.strftime("%Y-%m-%d %H:%M"),
+                        fare, t.status.value))
+        tree.pack(fill=tk.BOTH, expand=True, padx=8)
+        sb.config(command=tree.yview)
+
+    # ── Remove Admin ───────────────────────────────────────────
+    def remove_admin_dialog(self):
+        sel = self.admin_tree.selection()
+        if not sel:
+            messagebox.showerror("Error", "Select an admin to remove")
+            return
+        uid = self.admin_tree.item(sel[0])["values"][0]
+        u = self.bart_system.auth_service.users.get(uid)
+        if not u:
+            return
+        if isinstance(u, SuperAdmin):
+            messagebox.showerror("Error", "Cannot remove a Super Admin account")
+            return
+        if u.user_id == self.admin.user_id:
+            messagebox.showerror("Error", "Cannot remove your own account")
+            return
+        if messagebox.askyesno("Confirm Remove",
+                               f"Remove admin account '{u.username}' ({u.name})?\n\nThis cannot be undone."):
+            del self.bart_system.auth_service.users[u.user_id]
+            del self.bart_system.auth_service.username_index[u.username]
+            Toast(self.root, f"Admin {u.username} removed", color=RED)
+            self.update_displays()
 
     def logout(self):
         self.app.current_user = None
